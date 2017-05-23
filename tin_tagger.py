@@ -65,6 +65,8 @@ class MainApplication(tk.Tk):
             "AT": "Alternative terminator",
             "AP": "Alternative promoter"
         }
+        # Controls coverage graphics
+        self.wide_cov_mode = False
 
         # Window sizes
         self.window_height = 1000
@@ -87,8 +89,9 @@ class MainApplication(tk.Tk):
         # Draw a sidebar
         self.draw_sidebar()
 
-        dummy_data = self.create_dummy_data()
-        self.handle_row(dummy_data)
+        self.current_row_data = self.create_dummy_data()
+        # dummy_data = self.create_dummy_data()
+        self.handle_row(self.current_row_data)
 
     def handle_row(self, data):
         # Get general data
@@ -260,7 +263,7 @@ class MainApplication(tk.Tk):
 
         return dummy_data
 
-    def draw_alternative_terminator_event(self, data, wide_cov_mode=True):
+    def draw_alternative_terminator_event(self, data):
         """
         Draws exons on the canvas, one row per sample, where each row contains
         PSI and coverage metrics.
@@ -352,10 +355,10 @@ class MainApplication(tk.Tk):
                 frame_y_padding = 5
                 frame_border_width = 1
                 frame_width = 10
-                if wide_cov_mode:
+                if self.wide_cov_mode:
                     frame_width = 50
                 frame_start_x = 30 + x_offset
-                if wide_cov_mode:
+                if self.wide_cov_mode:
                     frame_start_x = x_offset - 10
                 frame_stop_x = frame_start_x + frame_width
 
@@ -374,7 +377,7 @@ class MainApplication(tk.Tk):
                 self.canvas.create_rectangle(start_x, start_y, stop_x, stop_y, outline=COLOR_RED, fill=COLOR_RED)
 
                 # Write coverage to the left of exon
-                if wide_cov_mode:
+                if self.wide_cov_mode:
                     # self.canvas.create_text(frame_start_x + (frame_width / 2) + 1, start_y + 1, text=exon_coverage, width=150, fill=COLOR_WHITE, font="Helvetica 16")  # This is for text on top of coverage column
                     # self.canvas.create_text(frame_start_x + (frame_width / 2), start_y, text=exon_coverage, width=150, fill=COLOR_DARKBLUE, font="Helvetica 16")       # This is for text on top of coverage column
                     coverage_text_y_pos = start_y - 7
@@ -564,6 +567,13 @@ class MainApplication(tk.Tk):
         Handles various keypresses
         """
         print "Pressed:", repr(event.char)
+        if event.char == '1':
+            # Redraw canvas with new color
+            self.wide_cov_mode = not self.wide_cov_mode
+            self.canvas.delete("all")
+            self.handle_row(self.current_row_data)
+        if event.char == '2':
+            self.canvas.delete("all")
 
     def copy_coords_to_clipboard(self, coords):
         """
