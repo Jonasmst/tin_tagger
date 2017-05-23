@@ -283,8 +283,8 @@ class MainApplication(tk.Tk):
         number_of_samples = len(samples_data)
 
         # Specify dimensions
-        window_height = self.window_height
-        window_width = self.window_width
+        window_height = self.canvas.height
+        window_width = self.canvas.width
 
         # Calc how much vertical space we have per sample
         height_per_sample = window_height / number_of_samples
