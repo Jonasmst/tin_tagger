@@ -302,7 +302,6 @@ class MainApplication(tk.Tk):
             poly_height = height_per_sample / 2
             x_offset = 200
             x_offset_increment = 400
-            # second_x_offset = 300
 
             # Draw a separator at the very bottom
             self.canvas.create_line(10, sample_start_y + height_per_sample, window_width - 10, sample_start_y + height_per_sample)
@@ -310,15 +309,12 @@ class MainApplication(tk.Tk):
             # Highlight background if this is the sample in question
             background_color = COLOR_DARKWHITE
             if sample_name == sample_of_interest:
-                # self.canvas.create_rectangle(0, sample_start_y, window_width, sample_start_y + height_per_sample, fill=COLOR_WHITE, outline=COLOR_RED)
-                # self.canvas.create_rectangle(0, sample_start_y, window_width, sample_start_y + height_per_sample, fill=COLOR_LIGHTRED)
                 background_color = COLOR_WHITE
             self.canvas.create_rectangle(0, sample_start_y, window_width, sample_start_y + height_per_sample, fill=background_color)
 
             # Print sample name on the left
             self.canvas.create_text(100, sample_start_y + (height_per_sample / 2), text=sample_name, width=100)
 
-            #### BEGIN TEST #####
             # Draw exons in a loop
             for exon in data["exons"]:
                 exon_name = exon["exon_name"]
@@ -378,14 +374,11 @@ class MainApplication(tk.Tk):
 
                 # Write coverage to the left of exon
                 if self.wide_cov_mode:
-                    # self.canvas.create_text(frame_start_x + (frame_width / 2) + 1, start_y + 1, text=exon_coverage, width=150, fill=COLOR_WHITE, font="Helvetica 16")  # This is for text on top of coverage column
-                    # self.canvas.create_text(frame_start_x + (frame_width / 2), start_y, text=exon_coverage, width=150, fill=COLOR_DARKBLUE, font="Helvetica 16")       # This is for text on top of coverage column
                     coverage_text_y_pos = start_y - 7
                     if percent_of_max_coverage >= 0.9:
                         # Draw text inside the frame, otherwise it'll overflow
                         coverage_text_y_pos = start_y + 10
                         # Also draw a white shadow, the background is all red
-                        # self.canvas.create_text(frame_start_x + (frame_width / 2) + 1, coverage_text_y_pos + 1, text=exon_coverage, width=150, fill=COLOR_WHITE, font="Helvetica 16")       # This is for text on top of coverage column
                     self.canvas.create_text(frame_start_x + (frame_width / 2), coverage_text_y_pos, text=exon_coverage, width=150, fill="black", font="Helvetica 16")       # This is for text on top of coverage column
                 else:
                     self.canvas.create_text(100 + x_offset - (85 + frame_width), poly_start + sample_start_y + (poly_height / 2), text=exon_coverage, width=150, fill=COLOR_DARKBLUE, font="Helvetica 16")
@@ -394,59 +387,11 @@ class MainApplication(tk.Tk):
                 self.canvas.create_text(101 + x_offset, poly_start + sample_start_y + (poly_height / 2) + 1, text=exon_name, width=100, fill="black")  # Text shadow
                 self.canvas.create_text(100 + x_offset, poly_start + sample_start_y + (poly_height / 2), text=exon_name, width=100, fill=COLOR_WHITE)
                 # Write PSI below exon
-                # self.canvas.create_text(100 + x_offset, poly_start + sample_start_y + poly_height + 10, text="%s" % exon_psi, fill=COLOR_DARKBLUE, font="Helvetica 16")
                 self.canvas.create_text(100 + x_offset + 125, poly_start + sample_start_y + (poly_height / 2), text=exon_psi, fill=COLOR_DARKBLUE, font="Helvetica 16")
 
                 x_offset += x_offset_increment
 
             sample_index += 1
-            #### END TEST #####
-
-            # # Create the left exon
-            # self.canvas.create_polygon(
-                # [
-                    # 50 + x_offset, poly_start + sample_start_y,  # Start point upper left
-                    # 50 + x_offset, poly_start + sample_start_y + poly_height,  # Down to the lower left corner
-                    # 150 + x_offset, poly_start + sample_start_y + poly_height,  # Right to the lower right corner
-                    # 150 + x_offset, poly_start + sample_start_y + ((poly_height / 4) * 3),  # Up to where the tail begins
-                    # 200 + x_offset, poly_start + sample_start_y + ((poly_height / 4) * 3),  # Right to where the tail ends
-                    # 200 + x_offset, poly_start + sample_start_y + (poly_height / 4),  # Up to the upper right corner of the tail
-                    # 150 + x_offset, poly_start + sample_start_y + (poly_height / 4),  # Left to where the tail begins
-                    # 150 + x_offset, poly_start + sample_start_y,  # Up to the upper right corner
-                    # 50 + x_offset, poly_start + sample_start_y  # Back to where it started
-                # ],
-                # fill=COLOR_BLUE,
-                # # outline=COLOR_RED
-                # outline=COLOR_DARKBLUE
-            # )
-
-            # # Write coverage above exon
-            # self.canvas.create_text(100 + x_offset, poly_start + sample_start_y - 10, text="Hello, this text", width=150, fill=COLOR_DARKBLUE, font="Helvetica 16 bold")
-            # # Write name of exon in the middle
-            # self.canvas.create_text(101 + x_offset, poly_start + sample_start_y + (poly_height / 2) + 1, text="Exon 1", width=100, fill="black")  # Text shadow
-            # self.canvas.create_text(100 + x_offset, poly_start + sample_start_y + (poly_height / 2), text="Exon 1", width=100, fill=COLOR_WHITE)
-
-            # # Create the right exon
-            # total_x_offset = x_offset + second_x_offset
-            # self.canvas.create_polygon(
-                # [
-                    # 50 + total_x_offset, poly_start + sample_start_y,  # Start point upper left
-                    # 50 + total_x_offset, poly_start + sample_start_y + poly_height,  # Down to the lower left corner
-                    # 150 + total_x_offset, poly_start + sample_start_y + poly_height,  # Right to the lower right corner
-                    # 150 + total_x_offset, poly_start + sample_start_y + ((poly_height / 4) * 3),  # Up to where the tail begins
-                    # 200 + total_x_offset, poly_start + sample_start_y + ((poly_height / 4) * 3),  # Right to where the tail ends
-                    # 200 + total_x_offset, poly_start + sample_start_y + (poly_height / 4),  # Up to the upper right corner of the tail
-                    # 150 + total_x_offset, poly_start + sample_start_y + (poly_height / 4),  # Left to where the tail begins
-                    # 150 + total_x_offset, poly_start + sample_start_y,  # Up to the upper right corner
-                    # 50 + total_x_offset, poly_start + sample_start_y  # Back to where it started
-                # ],
-                # fill="gray",
-                # outline=COLOR_DARKBLUE
-            # )
-
-            # # Write text
-            # self.canvas.create_text(100 + total_x_offset, poly_start + sample_start_y - 10, text="Coverage", width=150)
-            # self.canvas.create_text(100 + total_x_offset, poly_start + sample_start_y + (poly_height / 2), text="Exon 2", width=100)
 
         # Finally, add "all" tag to all drawn objects
         self.canvas.addtag_all("all")
