@@ -94,13 +94,13 @@ class MainApplication(tk.Tk):
         self.handle_row(self.current_row_data)
 
     def handle_row(self, data):
-        # Get general data
+        # Populate the sidebar with general information
         self.location_text["text"] = data["location"]
         self.splice_type_text["text"] = "%s (%s)" % (self.splice_type_map[data["splice_type"]], data["splice_type"])
         self.exons_text["text"] = data["exons"]
         self.sample_text = data["sample_of_interest"]
         self.gene_text["text"] = data["gene_symbol"]
-        # TODO: self.strand_text["text"] = data["strand"]
+        self.strand_text["text"] = data["strand"]
 
         if data["splice_type"] == "AT":
             self.draw_alternative_terminator_event(data)
@@ -268,8 +268,11 @@ class MainApplication(tk.Tk):
         Draws exons on the canvas, one row per sample, where each row contains
         PSI and coverage metrics.
 
-        wide_cov_mode controls wether to draw wide coverage columns or not.
+        wide_cov_mode controls whether to draw wide coverage columns or not.
         """
+
+        # First, wipe the canvas
+        self.canvas.delete("all")
 
         # Get list containing sample data
         samples_data = data["samples"]
@@ -313,7 +316,12 @@ class MainApplication(tk.Tk):
             self.canvas.create_rectangle(0, sample_start_y, window_width, sample_start_y + height_per_sample, fill=background_color)
 
             # Print sample name on the left
-            self.canvas.create_text(100, sample_start_y + (height_per_sample / 2), text=sample_name, width=100)
+            self.canvas.create_text(100, sample_start_y + (height_per_sample * 0.25), text=sample_name, width=100)
+            # Print gene RPKM on the left too.
+            # TODO: Find out a good placement for RPKM values
+            rpkm_x = 45
+            rpkm_y = sample_start_y + height_per_sample - 10
+            self.canvas.create_text(rpkm_x, rpkm_y, text="RPKM: %s" % data["gene_rpkm"], width=100)
 
             # Draw exons in a loop
             for exon in data["exons"]:
@@ -401,15 +409,20 @@ class MainApplication(tk.Tk):
         right_frame = tk.Frame(self, bg=COLOR_WHITE, width=self.sidebar_width, borderwidth=2, relief="groove")
         right_frame.pack(fill=tk.BOTH, expand=tk.YES, side=tk.RIGHT)
 
-        # Add a top label displaying information
-        info_label = tk.Label(right_frame, text="Event information", font="Helvetica 20", anchor=tk.CENTER, background=COLOR_DARKBLUE, foreground=COLOR_WHITE)
-        info_label.grid(row=0, column=0, columnspan=3, sticky="ew")
-        ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=1, column=0, columnspan=3, sticky="ew")
-
         # Width for all description labels
         labels_width = 15
         # Width for all text fields
         text_width = 35
+
+        # Keep track of rows, to make shuffling rows easier
+        current_row = 0
+
+        # Add a top label displaying information
+        info_label = tk.Label(right_frame, text="Event information", font="Helvetica 20", anchor=tk.CENTER, background=COLOR_DARKBLUE, foreground=COLOR_WHITE)
+        info_label.grid(row=current_row, column=0, columnspan=3, sticky="ew")
+        current_row += 1
+        ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=current_row, column=0, columnspan=3, sticky="ew")
+        current_row += 1
 
         # Label and text fonts
         label_font = "Helvetica 16 bold"
@@ -417,95 +430,115 @@ class MainApplication(tk.Tk):
 
         # Location / coordinates
         location_label = tk.Label(right_frame, text="Location:", font=label_font, anchor=tk.W, background=COLOR_WHITE, width=labels_width)
-        location_label.grid(row=2, column=0, columnspan=1)
-        coordinates_text = "1:12345678-12345679"
+        location_label.grid(row=current_row, column=0, columnspan=1)
+        coordinates_text = "coordinates"
         # location_text = tk.Label(right_frame, text=coordinates_text, font="Helvetica 16", anchor=tk.W, background=COLOR_WHITE, width=text_width, borderwidth=2, relief="groove")
         self.location_text = tk.Label(right_frame, text=coordinates_text, font=text_font, anchor=tk.W, background=COLOR_WHITE)
-        self.location_text.grid(row=2, column=1, sticky=tk.W)
+        self.location_text.grid(row=current_row, column=1, sticky=tk.W)
         copy_button = ttk.Button(right_frame, text="Copy", command=lambda: self.copy_coords_to_clipboard(coordinates_text))
-        copy_button.grid(row=2, column=2, sticky=tk.E)
+        copy_button.grid(row=current_row, column=2, sticky=tk.E)
+        current_row += 1
 
         # Splice type
         splice_type_label = tk.Label(right_frame, text="Splice type:", font=label_font, anchor=tk.W, background=COLOR_WHITE, width=labels_width)
-        splice_type_label.grid(row=3, column=0, columnspan=1)
-        splice_type = "ES"
-        splice_type_description = "%s (%s)" % (self.splice_type_map[splice_type], splice_type)
-        # splice_type_text = tk.Label(right_frame, text=splice_type_description, font="Helvetica 16", anchor=tk.W, background=COLOR_WHITE, width=text_width, borderwidth=2, relief="groove")
-        self.splice_type_text = tk.Label(right_frame, text=splice_type_description, font=text_font, anchor=tk.W, background=COLOR_WHITE)
-        self.splice_type_text.grid(row=3, column=1, sticky=tk.W)
+        splice_type_label.grid(row=current_row, column=0, columnspan=1)
+        splice_type = "Splice type"
+        self.splice_type_text = tk.Label(right_frame, text=splice_type, font=text_font, anchor=tk.W, background=COLOR_WHITE)
+        self.splice_type_text.grid(row=current_row, column=1, sticky=tk.W)
+        current_row += 1
 
         # Exons
         exons_label = tk.Label(right_frame, text="Exons:", font=label_font, anchor=tk.W, background=COLOR_WHITE, width=labels_width)
-        exons_label.grid(row=4, column=0, columnspan=1)
-        exons = "1:2.1:3.2:4.3:4:5:6:7:8:11.1:12:1:2:3:4:123:6:5:3:123:2345:456:678"
+        exons_label.grid(row=current_row, column=0, columnspan=1)
+        exons = "exons"
         self.exons_text = tk.Label(right_frame, text=exons, font=text_font, anchor=tk.W, background=COLOR_WHITE, width=text_width)
-        self.exons_text.grid(row=4, column=1)
+        self.exons_text.grid(row=current_row, column=1)
+        current_row += 1
 
         # Gene symbol
         gene_label = tk.Label(right_frame, text="Gene:", font=label_font, anchor=tk.W, background=COLOR_WHITE, width=labels_width)
-        gene_label.grid(row=5, column=0, columnspan=1)
-        gene = "TP53"
+        gene_label.grid(row=current_row, column=0, columnspan=1)
+        gene = "gene"
         self.gene_text = tk.Label(right_frame, text=gene, font=text_font, anchor=tk.W, background=COLOR_WHITE, width=text_width)
-        self.gene_text.grid(row=5, column=1)
+        self.gene_text.grid(row=current_row, column=1)
+        current_row += 1
+
+        # Strand
+        strand_label = tk.Label(right_frame, text="Strand:", font=label_font, anchor=tk.W, background=COLOR_WHITE, width=labels_width)
+        strand_label.grid(row=current_row, column=0, columnspan=1)
+        strand = "strand"
+        self.strand_text = tk.Label(right_frame, text=strand, font=text_font, anchor=tk.W, background=COLOR_WHITE, width=text_width)
+        self.strand_text.grid(row=current_row, column=1)
+        current_row += 1
 
         # Sample name
         sample_label = tk.Label(right_frame, text="Sample:", font=label_font, anchor=tk.W, background=COLOR_WHITE, width=labels_width)
-        sample_label.grid(row=6, column=0, columnspan=1)
-        sample = "sample5"
+        sample_label.grid(row=current_row, column=0, columnspan=1)
+        sample = "sample"
         self.sample_text = tk.Label(right_frame, text=sample, font=text_font, anchor=tk.W, background=COLOR_WHITE, width=text_width)
-        self.sample_text.grid(row=6, column=1)
+        self.sample_text.grid(row=current_row, column=1)
+        current_row += 1
 
         # Progress pane
         progress_label = tk.Label(right_frame, text="Progress", font="Helvetica 20", anchor=tk.CENTER, background=COLOR_DARKBLUE, foreground=COLOR_WHITE)
-        progress_label.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(100, 0))
-        ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=8, column=0, columnspan=3, sticky="ew")
+        progress_label.grid(row=current_row, column=0, columnspan=3, sticky="ew", pady=(100, 0))
+        current_row += 1
+        ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=current_row, column=0, columnspan=3, sticky="ew")
+        current_row += 1
 
         # Tagged yes/no/don't know
         tagged_width = 10
         tagged_labelframe = tk.LabelFrame(right_frame, text="Tagged events", padx=20, pady=20, background=COLOR_WHITE)
-        tagged_labelframe.grid(row=9, column=0, columnspan=3, rowspan=2)
+        tagged_labelframe.grid(row=current_row, column=0, columnspan=3, rowspan=2)
         yes_label = tk.Label(tagged_labelframe, text="0", font=text_font, bg=COLOR_WHITE, fg=COLOR_GREEN, borderwidth=1, relief="sunken", width=tagged_width, padx=10, pady=10)
-        yes_label.grid(row=9, column=0, columnspan=1, sticky="nw")
+        yes_label.grid(row=current_row, column=0, columnspan=1, sticky="nw")
         no_label = tk.Label(tagged_labelframe, text="0", font=text_font, width=tagged_width, padx=10, pady=10, bg=COLOR_WHITE, fg=COLOR_RED, borderwidth=1, relief="sunken")
-        no_label.grid(row=9, column=1, columnspan=1, sticky="nw")
+        no_label.grid(row=current_row, column=1, columnspan=1, sticky="nw")
         uncertain_label = tk.Label(tagged_labelframe, text="0", font=text_font, width=tagged_width, padx=10, pady=10, bg=COLOR_WHITE, fg=COLOR_ORANGE, borderwidth=1, relief="sunken")
-        uncertain_label.grid(row=9, column=2, columnspan=1, sticky="nw")
+        uncertain_label.grid(row=current_row, column=2, columnspan=1, sticky="nw")
+        current_row += 1
         yes_text = tk.Label(tagged_labelframe, text="Yes", font=text_font, bg=COLOR_WHITE, width=tagged_width, padx=10, pady=10)
-        yes_text.grid(row=10, column=0, columnspan=1, sticky="nw")
+        yes_text.grid(row=current_row, column=0, columnspan=1, sticky="nw")
         no_text = tk.Label(tagged_labelframe, text="No", font=text_font, bg=COLOR_WHITE, width=tagged_width, padx=10, pady=10)
-        no_text.grid(row=10, column=1, columnspan=1, sticky="nw")
+        no_text.grid(row=current_row, column=1, columnspan=1, sticky="nw")
         uncertain_text = tk.Label(tagged_labelframe, text="Don't know", font=text_font, bg=COLOR_WHITE, width=tagged_width, padx=10, pady=10)
-        uncertain_text.grid(row=10, column=2, columnspan=1, sticky="nw")
+        uncertain_text.grid(row=current_row, column=2, columnspan=1, sticky="nw")
+        current_row += 1
 
         # Saved information
         unsaved_label = tk.Label(right_frame, text="Unsaved tags:", font=label_font, anchor=tk.W, background=COLOR_WHITE, width=labels_width)
-        unsaved_label.grid(row=11, column=0, columnspan=1)
+        unsaved_label.grid(row=current_row, column=0, columnspan=1)
         num_unsaved = 10
         unsaved_text = tk.Label(right_frame, text=str(num_unsaved), font=text_font, anchor=tk.W, background=COLOR_WHITE, width=text_width)
-        unsaved_text.grid(row=11, column=1, columnspan=1, sticky="ew")
+        unsaved_text.grid(row=current_row, column=1, columnspan=1, sticky="ew")
         save_button = ttk.Button(right_frame, text="Save")
-        save_button.grid(row=11, column=2, sticky=tk.E)
+        save_button.grid(row=current_row, column=2, sticky=tk.E)
+        current_row += 1
 
         # Event tagging
         tagging_label = tk.Label(right_frame, text="Tag event", font="Helvetica 20", anchor=tk.CENTER, background=COLOR_DARKBLUE, foreground=COLOR_WHITE)
-        tagging_label.grid(row=12, column=0, columnspan=3, sticky="ew", pady=(100, 0))
-        ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=13, column=0, columnspan=3, sticky="ew")
+        tagging_label.grid(row=current_row, column=0, columnspan=3, sticky="ew", pady=(100, 0))
+        current_row += 1
+        ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=current_row, column=0, columnspan=3, sticky="ew")
         button_interesting = ttk.Button(right_frame, text="Interesting")
-        button_interesting.grid(row=13, column=0, sticky="ew")
+        button_interesting.grid(row=current_row, column=0, sticky="ew")
         button_not_intersting = ttk.Button(right_frame, text="Not interesting")
-        button_not_intersting.grid(row=13, column=1, sticky="ew")
+        button_not_intersting.grid(row=current_row, column=1, sticky="ew")
         button_uncertain = ttk.Button(right_frame, text="Don't know")
-        button_uncertain.grid(row=13, column=2, sticky="ew")
+        button_uncertain.grid(row=current_row, column=2, sticky="ew")
+        current_row += 1
 
-        ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=14, column=0, columnspan=3, sticky="ew", pady=(300, 0))
+        ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=current_row, column=0, columnspan=3, sticky="ew", pady=(300, 0))
+        current_row += 1
         # Previous tag + next and prev buttons
         previous_button = ttk.Button(right_frame, text="< previous")
-        previous_button.grid(row=15, column=0, sticky="w")
+        previous_button.grid(row=current_row, column=0, sticky="w")
         previous_tag = "N/A"
         previous_label = tk.Label(right_frame, text="Previous tag: %s" % previous_tag, font=text_font, anchor=tk.CENTER, background=COLOR_WHITE)
-        previous_label.grid(row=15, column=1, sticky="sew")
+        previous_label.grid(row=current_row, column=1, sticky="sew")
         next_button = ttk.Button(right_frame, text="next >")
-        next_button.grid(row=15, column=2, sticky="e")
+        next_button.grid(row=current_row, column=2, sticky="e")
+        current_row += 1
 
     def key_pressed(self, event):
         """
@@ -515,7 +548,6 @@ class MainApplication(tk.Tk):
         if event.char == '1':
             # Redraw canvas with new color
             self.wide_cov_mode = not self.wide_cov_mode
-            self.canvas.delete("all")
             self.handle_row(self.current_row_data)
         if event.char == '2':
             self.canvas.delete("all")
