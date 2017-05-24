@@ -71,9 +71,9 @@ class MainApplication(tk.Tk):
         # Controls coverage graphics
         self.wide_cov_mode = False
         # Dataset
-        print "Reading dataset:", self.dataset_path
         self.dataset = pd.read_csv(self.dataset_path, sep="\t")
-        print "Done reading dataset"
+        # Current row
+        self.current_row = 0  # Default to 0, controlled by prev/next buttons
 
         # Window sizes
         self.window_height = 1000
@@ -98,7 +98,32 @@ class MainApplication(tk.Tk):
 
         # self.current_row_data = self.create_dummy_data()
         # dummy_data = self.create_dummy_data()
-        self.current_row_data = self.get_row_data_by_index(0)
+        self.current_row_data = self.get_row_data_by_index(self.current_row)
+        self.handle_row(self.current_row_data)
+
+    def next_button_pressed(self):
+        """
+        Handles next button presses. Loads the next row in the dataset.
+        """
+        # TODO: Passing self-args to functions doesn't make sense. Change get_row_data and handle_row functions
+        self.current_row += 1
+        if self.current_row > len(self.dataset):
+            print "Wops: No more events (at end of dataset)"
+            self.current_row -= 1
+
+        # Load data for row
+        self.current_row_data = self.get_row_data_by_index(self.current_row)
+        self.handle_row(self.current_row_data)
+
+    def prev_button_pressed(self):
+        """
+        Handles previous button presses. Loads the previous row in the dataset.
+        """
+        self.current_row -= 1
+        if self.current_row < 0:
+            print "Wops: No more previous events (at beginning of dataset)"
+            self.current_row += 1
+        self.current_row_data = self.get_row_data_by_index(self.current_row)
         self.handle_row(self.current_row_data)
 
     def get_row_data_by_index(self, row_index):
@@ -224,10 +249,17 @@ class MainApplication(tk.Tk):
         """
         Returns the RPKM of a gene for a given sample
         """
-        rpkm = self.dataset.loc[(self.dataset["symbol"] == gene_name) & (self.dataset["name"] == sample_name)]["rpkm"].iloc[0]
+        df = self.dataset.loc[(self.dataset["symbol"] == gene_name) & (self.dataset["name"] == sample_name)]
+        # Handle genes that are not present in every sample
+        rpkm = -1.0
+        if len(df) > 0:
+            rpkm = df["rpkm"].iloc[0]
         return rpkm
 
     def handle_row(self, data):
+        """
+        Controls the drawing of events. Populates sidebar and how the canvas is drawn.
+        """
         # Populate the sidebar with general information
         self.location_text["text"] = data["location"]
         self.splice_type_text["text"] = "%s (%s)" % (self.splice_type_map[data["splice_type"]], data["splice_type"])
@@ -237,6 +269,7 @@ class MainApplication(tk.Tk):
         self.strand_text["text"] = data["strand"]
         self.psi_text["text"] = data["exon_psi"]
 
+        # Populate canvas
         if data["splice_type"] == "AT":
             self.draw_alternative_terminator_event(data)
         elif data["splice_type"] == "ES":
@@ -597,7 +630,11 @@ class MainApplication(tk.Tk):
             # Print sample name on the left
             self.canvas.create_text(left_text_x, sample_start_y + (height_per_sample * 0.25), text=sample_name, width=left_text_width, anchor=tk.W)
             # Print gene RPKM on the left too. Only 2 decimals
-            self.canvas.create_text(left_text_x, sample_start_y + (height_per_sample * 0.75), text="RPKM: %.2f" % data["gene_rpkm"], width=left_text_width, anchor=tk.W)
+            rpkm = data["gene_rpkm"]
+            rpkm_text = "RPKM: N/A"
+            if rpkm > 0:
+                rpkm_text = "RPKM: %.2f" % rpkm
+            self.canvas.create_text(left_text_x, sample_start_y + (height_per_sample * 0.75), text=rpkm_text, width=left_text_width, anchor=tk.W)
 
             #################################################
             #################### DRAW EXONS #################
@@ -812,12 +849,12 @@ class MainApplication(tk.Tk):
         ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=current_row, column=0, columnspan=3, sticky="ew", pady=(300, 0))
         current_row += 1
         # Previous tag + next and prev buttons
-        previous_button = ttk.Button(right_frame, text="< previous")
+        previous_button = ttk.Button(right_frame, text="< previous", command=self.prev_button_pressed)
         previous_button.grid(row=current_row, column=0, sticky="w")
         previous_tag = "N/A"
         previous_label = tk.Label(right_frame, text="Previous tag: %s" % previous_tag, font=text_font, anchor=tk.CENTER, background=COLOR_WHITE)
         previous_label.grid(row=current_row, column=1, sticky="sew")
-        next_button = ttk.Button(right_frame, text="next >")
+        next_button = ttk.Button(right_frame, text="next >", command=self.next_button_pressed)
         next_button.grid(row=current_row, column=2, sticky="e")
         current_row += 1
 
