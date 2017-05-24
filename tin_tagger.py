@@ -117,7 +117,7 @@ class MainApplication(tk.Tk):
         psi = self.dataset.iloc[row_index]["psi"]
         gene_symbol = self.dataset.iloc[row_index]["symbol"]
         strand = self.dataset.iloc[row_index]["strand"]
-        exons = self.dataset.iloc[row_index]["exons"]
+        exons = str(self.dataset.iloc[row_index]["exons"])
         chrom = self.dataset.iloc[row_index]["chr"]
         splice_start = self.dataset.iloc[row_index]["first_exon_start"]
         splice_stop = self.dataset.iloc[row_index]["last_exon_stop"]
@@ -135,8 +135,8 @@ class MainApplication(tk.Tk):
             next_exon_stop = self.dataset.iloc[row_index]["next_exon_start"]  # NaN for AT/AP
         included_counts = self.dataset.iloc[row_index]["included_counts"]
         excluded_counts = self.dataset.iloc[row_index]["excluded_counts"]
-        prev_exon_name = self.dataset.iloc[row_index]["exon1"]  # NaN for AT/AP
-        next_exon_name = self.dataset.iloc[row_index]["exon2"]  # NaN for AT/AP
+        prev_exon_name = str(self.dataset.iloc[row_index]["exon1"])  # NaN for AT/AP
+        next_exon_name = str(self.dataset.iloc[row_index]["exon2"])  # NaN for AT/AP
         # prev_exon_id = self.dataset.iloc[row_index]["start_ex"]  # NaN for AT/AP
         # next_exon_id = self.dataset.iloc[row_index]["end_ex"]  # NaN for AT/AP
 
@@ -183,7 +183,8 @@ class MainApplication(tk.Tk):
             "location": coordinates,
             "exons": exons,
             "strand": strand,
-            "as_id": as_id
+            "as_id": as_id,
+            "exon_psi": str(psi)
         }
 
         # Sample-specific data
@@ -209,10 +210,6 @@ class MainApplication(tk.Tk):
 
         row_data["samples"] = samples_data
 
-        import json
-        print "Row data:"
-        print json.dumps(row_data, indent=4)
-
         return row_data
 
     def get_coverage_by_coordinates(self, sample_name, coordinates):
@@ -235,12 +232,15 @@ class MainApplication(tk.Tk):
         self.location_text["text"] = data["location"]
         self.splice_type_text["text"] = "%s (%s)" % (self.splice_type_map[data["splice_type"]], data["splice_type"])
         self.exons_text["text"] = data["exons"]
-        self.sample_text = data["sample_of_interest"]
+        self.sample_text["text"] = data["sample_of_interest"]
         self.gene_text["text"] = data["gene_symbol"]
         self.strand_text["text"] = data["strand"]
+        self.psi_text["text"] = data["exon_psi"]
 
         if data["splice_type"] == "AT":
             self.draw_alternative_terminator_event(data)
+        elif data["splice_type"] == "ES":
+            self.draw_exon_skipping_event(data)
 
     def create_dummy_data(self):
         # Create a dummy json-esque data container
@@ -542,6 +542,141 @@ class MainApplication(tk.Tk):
         # Finally, add "all" tag to all drawn objects
         self.canvas.addtag_all("all")
 
+    def draw_exon_skipping_event(self, data):
+        """
+        Draws exon skipping event on canvas
+        """
+
+        # First, wipe the canvas
+        self.canvas.delete("all")
+
+        # Get list containing sample data
+        samples_data = data["samples"]
+        sample_of_interest = data["sample_of_interest"]
+        exon_of_interest = data["exons"]
+
+        # Keep track of number of samples and adjust vertical space for each samples accordingly
+        number_of_samples = len(samples_data)
+
+        # Specify dimensions
+        window_height = self.canvas.height
+        window_width = self.canvas.width
+
+        # Calc how much vertical space we have per sample
+        height_per_sample = window_height / number_of_samples
+
+        # Keep track of sample index
+        sample_index = 0
+
+        # Loop the samples
+        for sample_name in sorted(samples_data.keys(), key=natural_sort_key):
+            # Get sample data
+            data = samples_data[sample_name]
+            # Define a start y-coordinate for this sample
+            sample_start_y = sample_index * height_per_sample
+
+            # Define some dimesions
+            poly_start_y = height_per_sample / 4
+            poly_height = height_per_sample / 2
+            poly_width = 100
+            poly_start_x = 45
+            x_offset = 200
+            x_offset_increment = 200
+            left_text_x = 10
+            left_text_width = 100
+
+            # Draw a separator at the very bottom
+            self.canvas.create_line(10, sample_start_y + height_per_sample, window_width - 10, sample_start_y + height_per_sample)
+
+            # Highlight background if this is the sample in question
+            background_color = COLOR_DARKWHITE
+            if sample_name == sample_of_interest:
+                background_color = COLOR_WHITE
+            self.canvas.create_rectangle(0, sample_start_y, window_width, sample_start_y + height_per_sample, fill=background_color)
+
+            # Print sample name on the left
+            self.canvas.create_text(left_text_x, sample_start_y + (height_per_sample * 0.25), text=sample_name, width=left_text_width, anchor=tk.W)
+            # Print gene RPKM on the left too. Only 2 decimals
+            self.canvas.create_text(left_text_x, sample_start_y + (height_per_sample * 0.75), text="RPKM: %.2f" % data["gene_rpkm"], width=left_text_width, anchor=tk.W)
+
+            #################################################
+            #################### DRAW EXONS #################
+            #################################################
+            for exon_name in sorted(data["exons"].keys(), key=natural_sort_key):
+                exon = data["exons"][exon_name]
+                exon_coverage = str(exon["coverage"])
+                # exon_psi = str(exon["psi"])
+
+                # Define exon color
+                outline_color = COLOR_DARKBLUE
+                outline_width = 1
+                if exon_name == exon_of_interest and sample_name == sample_of_interest:
+                    outline_color = COLOR_DARKBLUE
+                    outline_width = 3
+
+                # Draw exon
+                self.canvas.create_rectangle(
+                    poly_start_x + x_offset, sample_start_y + poly_start_y,
+                    poly_start_x + poly_width + x_offset, sample_start_y + poly_start_y + poly_height,
+                    outline=outline_color,
+                    width=outline_width,
+                    fill=COLOR_BLUE
+                )
+
+                ##############################################
+                ############## COVERAGE STUFF ################
+                ##############################################
+                # Calc percentage of max coverage for this exon
+                percent_of_max_coverage = float(exon["coverage"]) / float(exon["max_coverage"])
+                # Draw coverage frame
+                frame_y_padding = 5
+                frame_border_width = 1
+                frame_width = 10
+                if self.wide_cov_mode:
+                    frame_width = 50
+                frame_start_x = 30 + x_offset
+                if self.wide_cov_mode:
+                    frame_start_x = x_offset - 10
+                frame_stop_x = frame_start_x + frame_width
+
+                # Draw coverage frame
+                frame_start_y = sample_start_y + frame_y_padding
+                frame_stop_y = sample_start_y + height_per_sample - frame_y_padding
+                frame_height = frame_stop_y - frame_start_y - (2 * frame_border_width)
+                height_of_coverage = float(frame_height) * float(percent_of_max_coverage)
+                self.canvas.create_rectangle(frame_start_x, frame_start_y, frame_stop_x, frame_stop_y, width=frame_border_width, outline="black")
+
+                # Draw coverage fill
+                start_x = frame_start_x + frame_border_width
+                start_y = frame_stop_y - frame_border_width - height_of_coverage
+                stop_x = frame_stop_x - frame_border_width
+                stop_y = frame_stop_y - frame_border_width
+                self.canvas.create_rectangle(start_x, start_y, stop_x, stop_y, outline=COLOR_RED, fill=COLOR_RED)
+
+                # Write coverage to the left of exon
+                if self.wide_cov_mode:
+                    coverage_text_y_pos = start_y - 7
+                    if percent_of_max_coverage >= 0.9:
+                        # Draw text inside the frame, otherwise it'll overflow
+                        coverage_text_y_pos = start_y + 10
+                        # Also draw a white shadow, the background is all red
+                    self.canvas.create_text(frame_start_x + (frame_width / 2), coverage_text_y_pos, text=exon_coverage, width=150, fill="black", font="Helvetica 16")       # This is for text on top of coverage column
+                else:
+                    self.canvas.create_text(100 + x_offset - (85 + frame_width), poly_start_y + sample_start_y + (poly_height / 2), text=exon_coverage, width=150, fill=COLOR_DARKBLUE, font="Helvetica 16")
+
+                # Write name of exon in the middle
+                self.canvas.create_text(poly_start_x + x_offset + (poly_width / 2) + 1, poly_start_y + sample_start_y + (poly_height / 2) + 1, text=exon_name, width=100, fill="black")  # Text shadow
+                self.canvas.create_text(poly_start_x + x_offset + (poly_width / 2), poly_start_y + sample_start_y + (poly_height / 2), text=exon_name, width=100, fill=COLOR_WHITE)
+                # Write PSI below exon
+                # self.canvas.create_text(100 + x_offset + 125, poly_start_y+ sample_start_y + (poly_height / 2), text=exon_psi, fill=COLOR_DARKBLUE, font="Helvetica 16")
+
+                x_offset += x_offset_increment
+
+            sample_index += 1
+
+        # Finally, add "all" tag to all drawn objects
+        self.canvas.addtag_all("all")
+
     def draw_sidebar(self):
         # Add a frame to keep everything in. Note that this does not autoscale very well
         right_frame = tk.Frame(self, bg=COLOR_WHITE, width=self.sidebar_width, borderwidth=2, relief="groove")
@@ -615,6 +750,14 @@ class MainApplication(tk.Tk):
         sample = "sample"
         self.sample_text = tk.Label(right_frame, text=sample, font=text_font, anchor=tk.W, background=COLOR_WHITE, width=text_width)
         self.sample_text.grid(row=current_row, column=1)
+        current_row += 1
+
+        # PSI
+        psi_label = tk.Label(right_frame, text="PSI:", font=label_font, anchor=tk.W, background=COLOR_WHITE, width=labels_width)
+        psi_label.grid(row=current_row, column=0, columnspan=1)
+        psi = "PSI"
+        self.psi_text = tk.Label(right_frame, text=psi, font=text_font, anchor=tk.W, background=COLOR_WHITE, width=text_width)
+        self.psi_text.grid(row=current_row, column=1)
         current_row += 1
 
         # Progress pane
@@ -708,7 +851,7 @@ class MainApplication(tk.Tk):
 if __name__ == "__main__":
     # Get path to dataset from arguments
     # dataset_filepath = sys.argv[1]
-    dataset_filepath = "/Users/jonas/Dropbox/phd/code/tin_tagger/datasets/mikes_query.tsv"
+    dataset_filepath = "/Users/jonas/Dropbox/phd/code/tin_tagger/datasets/es_only.tsv"
     app = MainApplication(dataset_filepath)
     app.wm_title("Hello world, look at meeee")
     app.mainloop()
