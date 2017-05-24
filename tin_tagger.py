@@ -2,6 +2,8 @@ import Tkinter as tk
 import ttk
 import sys
 import re
+import pandas as pd
+import random
 
 COLOR_BLUE = "#3498db"
 COLOR_YELLOW = "#f1c40f"
@@ -46,7 +48,7 @@ def natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
 
 
 class MainApplication(tk.Tk):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, dataset_path, *args, **kwargs):
         # Super init
         tk.Tk.__init__(self, *args, **kwargs)
 
@@ -65,8 +67,13 @@ class MainApplication(tk.Tk):
             "AT": "Alternative terminator",
             "AP": "Alternative promoter"
         }
+        self.dataset_path = dataset_path
         # Controls coverage graphics
         self.wide_cov_mode = False
+        # Dataset
+        print "Reading dataset:", self.dataset_path
+        self.dataset = pd.read_csv(self.dataset_path, sep="\t")
+        print "Done reading dataset"
 
         # Window sizes
         self.window_height = 1000
@@ -89,9 +96,139 @@ class MainApplication(tk.Tk):
         # Draw a sidebar
         self.draw_sidebar()
 
-        self.current_row_data = self.create_dummy_data()
+        # self.current_row_data = self.create_dummy_data()
         # dummy_data = self.create_dummy_data()
+        self.current_row_data = self.get_row_data_by_index(0)
         self.handle_row(self.current_row_data)
+
+    def get_row_data_by_index(self, row_index):
+        """
+        Returns formatted data for a given row index.
+        """
+        # TODO: Sanitize everything
+        # TODO: Find included_counts and excluded_counts for other exons than the one in question
+
+        # Get all sample names
+        sample_names = list(self.dataset["name"].unique())
+
+        splice_type = self.dataset.iloc[row_index]["splice_type"]
+        sample_name = self.dataset.iloc[row_index]["name"]
+        as_id = self.dataset.iloc[row_index]["as_id"]
+        psi = self.dataset.iloc[row_index]["psi"]
+        gene_symbol = self.dataset.iloc[row_index]["symbol"]
+        strand = self.dataset.iloc[row_index]["strand"]
+        exons = self.dataset.iloc[row_index]["exons"]
+        chrom = self.dataset.iloc[row_index]["chr"]
+        splice_start = self.dataset.iloc[row_index]["first_exon_start"]
+        splice_stop = self.dataset.iloc[row_index]["last_exon_stop"]
+        prev_exon_start = self.dataset.iloc[row_index]["prev_exon_start"]  # NaN for AT/AP
+        prev_exon_stop = self.dataset.iloc[row_index]["prev_exon_stop"]  # NaN for AT/AP
+        next_exon_start = self.dataset.iloc[row_index]["next_exon_start"]  # NaN for AT/AP
+        next_exon_stop = self.dataset.iloc[row_index]["next_exon_stop"]  # NaN for AT/AP
+        # Handle negative strand start- and stop- coordinates
+        if strand == "-":
+            splice_start = self.dataset.iloc[row_index]["last_exon_stop"]  # NaN for AT/AP
+            splice_stop = self.dataset.iloc[row_index]["first_exon_start"]  # NaN for AT/AP
+            prev_exon_start = self.dataset.iloc[row_index]["prev_exon_stop"]  # NaN for AT/AP
+            prev_exon_stop = self.dataset.iloc[row_index]["prev_exon_start"]  # NaN for AT/AP
+            next_exon_start = self.dataset.iloc[row_index]["next_exon_stop"]  # NaN for AT/AP
+            next_exon_stop = self.dataset.iloc[row_index]["next_exon_start"]  # NaN for AT/AP
+        included_counts = self.dataset.iloc[row_index]["included_counts"]
+        excluded_counts = self.dataset.iloc[row_index]["excluded_counts"]
+        prev_exon_name = self.dataset.iloc[row_index]["exon1"]  # NaN for AT/AP
+        next_exon_name = self.dataset.iloc[row_index]["exon2"]  # NaN for AT/AP
+        # prev_exon_id = self.dataset.iloc[row_index]["start_ex"]  # NaN for AT/AP
+        # next_exon_id = self.dataset.iloc[row_index]["end_ex"]  # NaN for AT/AP
+
+        # Create coordinates from chr, start and stop
+        coordinates = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
+
+        # Find coverage for all exons in every sample
+        exon_coverages = {}
+        for s_name in sample_names:
+            # First find for exon in question
+            coverage = self.get_coverage_by_coordinates(s_name, coordinates)
+            # included_counts, excluded_counts = self.get_included_and_excluded_counts
+            if exons not in exon_coverages.keys():
+                exon_coverages[exons] = {}
+            exon_coverages[exons][s_name] = coverage
+
+            # Then previous exon (if applicable)
+            if not pd.isnull(prev_exon_name):
+                if pd.isnull(prev_exon_start) or pd.isnull(prev_exon_stop):
+                    print "Error: prev_exon_name is fine, but there's no prev_exon_start or prev_exon_stop"
+                # Find coords
+                prev_coords = str(chrom) + ":" + str(int(prev_exon_start)) + "-" + str(int(prev_exon_stop))
+                prev_coverage = self.get_coverage_by_coordinates(s_name, prev_coords)
+                if prev_exon_name not in exon_coverages.keys():
+                    exon_coverages[prev_exon_name] = {}
+                exon_coverages[prev_exon_name][s_name] = prev_coverage
+
+            # Lastly, the next exon (if applicable)
+            if not pd.isnull(next_exon_name):
+                if pd.isnull(next_exon_start) or pd.isnull(next_exon_stop):
+                    print "Error: next_exon_name is fine, but there's no next_exon_start or next_exon_stop"
+                # Find coords
+                next_coords = str(chrom) + ":" + str(int(next_exon_start)) + "-" + str(int(next_exon_stop))
+                next_coverage = self.get_coverage_by_coordinates(s_name, next_coords)
+                if next_exon_name not in exon_coverages.keys():
+                    exon_coverages[next_exon_name] = {}
+                exon_coverages[next_exon_name][s_name] = next_coverage
+
+        # General row data
+        row_data = {
+            "splice_type": splice_type,
+            "gene_symbol": gene_symbol,
+            "sample_of_interest": sample_name,
+            "location": coordinates,
+            "exons": exons,
+            "strand": strand,
+            "as_id": as_id
+        }
+
+        # Sample-specific data
+        samples_data = {}
+        for s_name in sample_names:
+            if s_name not in samples_data.keys():
+                samples_data[s_name] = {}
+            samples_data[s_name]["gene_rpkm"] = self.get_gene_rpkm_by_sample(s_name, gene_symbol)
+            # Find exons in this sample
+            sample_exons = {}
+            for e_name in exon_coverages.keys():
+                if e_name not in sample_exons.keys():
+                    sample_exons[e_name] = {}
+                sample_exons[e_name]["coverage"] = exon_coverages[e_name][s_name]
+                if s_name == sample_name and e_name == exons:
+                    sample_exons[e_name]["psi"] = psi
+                else:
+                    sample_exons[e_name]["psi"] = "N/A"
+                sample_exons[e_name]["max_coverage"] = max(exon_coverages[e_name].values())
+
+            # Add exon data to sample
+            samples_data[s_name]["exons"] = sample_exons
+
+        row_data["samples"] = samples_data
+
+        import json
+        print "Row data:"
+        print json.dumps(row_data, indent=4)
+
+        return row_data
+
+    def get_coverage_by_coordinates(self, sample_name, coordinates):
+        """
+        Runs samtools to find coverage for region in a sample.
+        """
+        # TODO: Get path to file, run samtools via subprocess, calc avg. coverage for region and return
+        # For now, just return a random int.
+        return random.randint(100, 2000)
+
+    def get_gene_rpkm_by_sample(self, sample_name, gene_name):
+        """
+        Returns the RPKM of a gene for a given sample
+        """
+        rpkm = self.dataset.loc[(self.dataset["symbol"] == gene_name) & (self.dataset["name"] == sample_name)]["rpkm"].iloc[0]
+        return rpkm
 
     def handle_row(self, data):
         # Populate the sidebar with general information
@@ -325,6 +462,7 @@ class MainApplication(tk.Tk):
 
             # Draw exons in a loop
             for exon in data["exons"]:
+                # TODO: Draw exons in order
                 exon_name = exon["exon_name"]
                 exon_coverage = str(exon["coverage"])
                 exon_psi = str(exon["psi"])
@@ -568,6 +706,9 @@ class MainApplication(tk.Tk):
 ########### RUN #############
 #############################
 if __name__ == "__main__":
-    app = MainApplication()
+    # Get path to dataset from arguments
+    # dataset_filepath = sys.argv[1]
+    dataset_filepath = "/Users/jonas/Dropbox/phd/code/tin_tagger/datasets/mikes_query.tsv"
+    app = MainApplication(dataset_filepath)
     app.wm_title("Hello world, look at meeee")
     app.mainloop()
