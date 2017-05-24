@@ -4,6 +4,8 @@ import sys
 import re
 import pandas as pd
 import random
+import os
+import subprocess
 
 COLOR_BLUE = "#3498db"
 COLOR_YELLOW = "#f1c40f"
@@ -16,6 +18,8 @@ COLOR_LIGHTRED = "#ffe5e2"
 COLOR_DARKWHITE = "#bdc3c7"
 COLOR_DARKGRAY = "#7f8c8d"
 COLOR_ORANGE = "#e67e22"
+
+BAM_PATH = "/tsd/p19/data/durable/Projects/CRC-RNA-Seq/hisat2/transcriptome"
 
 
 class ResizingCanvas(tk.Canvas):
@@ -67,6 +71,11 @@ class MainApplication(tk.Tk):
             "AT": "Alternative terminator",
             "AP": "Alternative promoter"
         }
+        # BAM filepaths. TODO: Read this from file or something (*samplename*:*pathtobam*\n)
+        self.bam_paths = {}
+        for x in range(1, 11):
+            self.bam_paths["sample%s" % str(x)] = os.path.join(BAM_PATH, "%s.sorted.bam" % str(x))
+        # Pandas dataset
         self.dataset_path = dataset_path
         # Controls coverage graphics
         self.wide_cov_mode = False
@@ -74,6 +83,8 @@ class MainApplication(tk.Tk):
         self.dataset = pd.read_csv(self.dataset_path, sep="\t")
         # Current row
         self.current_row = 0  # Default to 0, controlled by prev/next buttons
+        # Flag to define if we're just testing or running for real
+        self.testing = False
 
         # Window sizes
         self.window_height = 1000
@@ -243,7 +254,24 @@ class MainApplication(tk.Tk):
         """
         # TODO: Get path to file, run samtools via subprocess, calc avg. coverage for region and return
         # For now, just return a random int.
-        return random.randint(100, 2000)
+        # return random.randint(100, 2000)
+
+        if self.testing:
+            return random.randint(100, 2000)
+        else:
+            path_to_bam = self.bam_paths[sample_name]
+            command = "samtools depth -r %s %s | awk '{sum+=$3;cnt++;}END{if (cnt>0){ print sum/cnt } else print 0}'" % (coordinates, path_to_bam)
+            # TODO: Something about security issue with shell=True, but it allows piping in awk commands, so I'll keep it for now
+            samtools_output = subprocess.check_output(command, shell=True)
+
+            region_coverage = -1.0
+            try:
+                region_coverage = float(samtools_output)
+            except:
+                print "ERROR: Samtools output can't be converted to float:"
+                print samtools_output
+
+            return region_coverage
 
     def get_gene_rpkm_by_sample(self, sample_name, gene_name):
         """
@@ -664,7 +692,10 @@ class MainApplication(tk.Tk):
                 ############## COVERAGE STUFF ################
                 ##############################################
                 # Calc percentage of max coverage for this exon
-                percent_of_max_coverage = float(exon["coverage"]) / float(exon["max_coverage"])
+                if not float(exon["max_coverage"]) > 0.0:
+                    percent_of_max_coverage = 0.00
+                else:
+                    percent_of_max_coverage = float(exon["coverage"]) / float(exon["max_coverage"])
                 # Draw coverage frame
                 frame_y_padding = 5
                 frame_border_width = 1
