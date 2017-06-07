@@ -848,7 +848,7 @@ class TINTagger(tk.Tk):
 
             if not filtered_dataset:
                 tkMessageBox.showerror("Error", "Selected filters returned empty dataset. Filters have been reset to defaults.")
-                self.dataset = self.get_default_filters()
+                self.filters = self.get_default_filters()
             else:
                 print "BUG: Reached unreachable code (TINTagger.apply_filters())"
 
