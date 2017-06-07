@@ -625,7 +625,7 @@ class TINTagger(tk.Tk):
                 text=filters_copy["splice_type"][splice_type]["description"],
                 variable=filters_copy["splice_type"][splice_type]["enabled_var"],
                 onvalue=1,
-                offvalue=1
+                offvalue=0
             )
             check_button.grid(column=0, row=current_splice_type_row, sticky="W")
             current_splice_type_row += 1
@@ -842,7 +842,7 @@ class TINTagger(tk.Tk):
                 self.dataset = filtered_dataset
                 self.current_row_index = 0
                 self.update_information()
-        except ValueError as e:
+        except AttributeError as e:
             # TODO: Test if this works
             print "ERROR: Empty dataset after filtering: %s" % e.message
 
