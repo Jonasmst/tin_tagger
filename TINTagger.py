@@ -12,10 +12,7 @@ import tkMessageBox
 from TINDataProcessor import TINDataProcessor
 
 # TODO: Cache rows so we don't need to run samtools etc when pressing previous-button
-# TODO: Draw alternative terminator events.
 # TODO: Find PSI, included counts, excluded counts for other exons and display if it's available (gonna be an sql-call).
-# TODO: Create a filter dialog that lets me filter on gene rpkm, included counts etc. Just do a pd.loc, reset the current row index and repaint everything.
-# TODO: Lookup the first event in SpliceSeq, why is 6.1:6.2 flanked by 5 and 7 and not 6.1 and 6.3? What does the splicegraph look like?
 
 """
 ################################################
@@ -24,8 +21,8 @@ Main frame:
     Row 0           left_frame      sidebar
 ################################################
 Left frame
-                    Column 0        Column 1
-    Row 0           sample_frame    exon_frame
+                    Column 0        Column 1        Column 2?
+    Row 0           sample_frame    exon_frame      buttons_frame?
 ################################################
 Exon frame
                     Column 0
@@ -234,7 +231,6 @@ class TINTagger(tk.Tk):
         sample_frame = ttk.Frame(self.left_frame, padding=(5, 0, 5, 0))
         sample_frame.grid(column=0, row=0, sticky="WNS")
 
-        # TODO: Consider wether to keep this.
         # Vertical separator between samples frame and exons frame
         sep = ttk.Separator(self.left_frame, orient=tk.VERTICAL)
         sep.grid(column=0, row=0, sticky="NSE")
@@ -255,7 +251,7 @@ class TINTagger(tk.Tk):
         """
         The exon frame is part of the left frame and contains the exon names and the exon canvases
         """
-        exon_frame = ttk.Frame(self.left_frame, padding=0)
+        exon_frame = ttk.Frame(self.left_frame, padding=0, borderwidth=1, relief=tk.SOLID)
         exon_frame.grid(column=1, row=0, sticky="NEWS")
 
         return exon_frame
@@ -263,7 +259,6 @@ class TINTagger(tk.Tk):
     def create_right_sidebar(self):
         """ Creates the sidebar to the right"""
 
-        # TODO: This is column 1 in the main frame now
         right_sidebar = ttk.Frame(self.main_frame, padding=5)
         right_sidebar.grid(column=1, row=0, sticky="ENS")
 
@@ -483,9 +478,6 @@ class TINTagger(tk.Tk):
         dataset_menu.add_command(label="Save current filters", command=self.save_dataset_filters)
 
     def show_filter_dataset_window(self):
-        # TODO: As filters are set (lose focus?) update the number of hits?
-        # TODO: Only apply filters if they're changed (one might open the filter view to only see the filters).
-        # TODO: Checkboxes don't work, all of a sudden. Prob after the deepcopy-trick.
 
         # Alter a copy of the current settings and only apply them if instructed by the user
         native_filters = self.convert_filters_to_native_types()  # copy.deepcopy() doesn't understand tk.IntVars
@@ -789,8 +781,8 @@ class TINTagger(tk.Tk):
             native_filters = self.convert_filters_to_native_types()
             success = self.data_processor.save_filters(native_filters, filepath)
             if not success:
-                # TODO: Handle return status: Show error message somewhere if saving failed.
                 print "Error: Unable to save filters."
+                self.set_statusbar_text("Something went wrong when saving filters.")
             else:
                 self.set_statusbar_text("Filters saved to file: %s" % filepath)
 
@@ -843,7 +835,6 @@ class TINTagger(tk.Tk):
                 self.current_row_index = 0
                 self.update_information()
         except AttributeError as e:
-            # TODO: Test if this works
             print "ERROR: Empty dataset after filtering: %s" % e.message
 
             if not filtered_dataset:
@@ -1768,6 +1759,39 @@ class TINTagger(tk.Tk):
             # Initialize canvas and grid to this row in the exon frame
             row_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=canvas_height)
             row_canvas.grid(row=row_number, column=0, sticky="NEWS")
+
+            # TEST: Create button frame
+            # TODO: If this is tagged, highlight the corresponding button
+            style = ttk.Style()
+            style.configure("Green.TButton", foreground=COLOR_DARKBLUE)
+            style.configure("Red.TButton", foreground=COLOR_DARKBLUE)
+            style.configure("Orange.TButton", foreground=COLOR_DARKBLUE)
+            style.map(
+                "Green.TButton",
+                foreground=[("active", COLOR_GREEN)],
+            )
+            style.map(
+                "Red.TButton",
+                foreground=[("active", COLOR_RED)]
+            )
+            style.map(
+                "Orange.TButton",
+                foreground=[("active", COLOR_ORANGE)]
+            )
+            button_frame = ttk.Frame(self.exon_frame)
+            button_frame.grid(row=row_number, column=1, sticky="NEWS")
+            up_button = ttk.Button(button_frame, text=u"\u25B2", style="Green.TButton")
+            up_button.grid(column=0, row=0, sticky="NEWS")
+            down_button = ttk.Button(button_frame, text=u"\u25BC", style="Red.TButton")
+            down_button.grid(column=0, row=1, sticky="NEWS")
+            uncertain_button = ttk.Button(button_frame, text="?", style="Orange.TButton")
+            uncertain_button.grid(column=0, row=2, sticky="NEWS")
+            button_frame.rowconfigure(0, weight=1)
+            button_frame.rowconfigure(1, weight=1)
+            button_frame.rowconfigure(2, weight=1)
+
+            self.exon_frame.columnconfigure(0, weight=1)
+            # END TEST
 
             # Keep track of canvases used
             self.canvases.append(row_canvas)
