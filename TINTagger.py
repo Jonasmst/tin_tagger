@@ -49,6 +49,10 @@ COLOR_CANVAS_TEXT = COLOR_WHITE
 COLOR_CANVAS_TEXT_SHADOW = "black"
 COLOR_SAMPLE_HIGHLIGHT = COLOR_LIGHTRED
 
+TAG_INTERESTING = 0
+TAG_NOT_INTERESTING = 1
+TAG_UNCERTAIN = 2
+TAG_NO_TAG = -1
 
 def natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
     """ Provides natural sort as a key to sorted() """
@@ -970,7 +974,7 @@ class TINTagger(tk.Tk):
 
             # Dodge the open-file-dialog when testing/debugging
             if self.testing:
-                self.read_dataset("/Users/jonas/Dropbox/phd/code/tin_tagger/datasets/mikes_query.tsv")
+                self.read_dataset("/Users/jonas/Dropbox/phd/code/tin_tagger/datasets/mikes_query_with_tags.tsv")
 
             return
 
@@ -1023,14 +1027,19 @@ class TINTagger(tk.Tk):
         positive, negative, and neutral tags are in the dataset.
         """
 
-        # TODO: Implement actual checking
-        positive_tags = random.randint(0, 6000)
+        # Find events that are tagged as interesting
+        positive_tags = len(self.dataset.loc[self.dataset["event_tag"] == TAG_INTERESTING])
         self.statusbar_text_interesting["text"] = "%d" % positive_tags
-        negative_tags = random.randint(0, 6000)
+
+        # Find events that are tagged as not interesting
+        negative_tags = len(self.dataset.loc[self.dataset["event_tag"] == TAG_NOT_INTERESTING])
         self.statusbar_text_not_interesting["text"] = "%d" % negative_tags
-        neutral_tags = random.randint(0, 6000)
+
+        # Find events that are tagged as uncertain
+        neutral_tags = len(self.dataset.loc[self.dataset["event_tag"] == TAG_UNCERTAIN])
         self.statusbar_text_uncertain["text"] = "%d" % neutral_tags
 
+        # Find how many events are tagged, in total
         total_events = len(self.dataset)
         total_tags = positive_tags + negative_tags + neutral_tags
         self.statusbar_text_progress["text"] = "%d/%d" % (total_tags, total_events)
