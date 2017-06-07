@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import json
 
+
 class TINDataProcessor(object):
 
     def __init__(self):

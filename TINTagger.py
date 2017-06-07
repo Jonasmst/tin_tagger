@@ -5,7 +5,7 @@ import re
 from tkFileDialog import askopenfilename, asksaveasfilename
 import pandas as pd
 import os
-import json
+import copy
 import random
 import subprocess
 import tkMessageBox
@@ -151,6 +151,14 @@ class TINTagger(tk.Tk):
 
         # Default filter options
         self.filters = self.get_default_filters()
+
+        # Flags to indicate if current filters are valid
+        self.valid_filters = {
+            "psi_filter": 1,
+            "included_counts_filter": 1,
+            "excluded_counts_filter": 1,
+            "rpkm_filter": 1
+        }
 
         ###########################
         # Bind various keypresses #
@@ -475,36 +483,46 @@ class TINTagger(tk.Tk):
         dataset_menu.add_command(label="Save current filters", command=self.save_dataset_filters)
 
     def show_filter_dataset_window(self):
-        # TODO: Add visual indicator showing if filters are applied.
-        # TODO: Option to save/load filters (save options in JSON-ish format with filetype e.g. .choices.filter)
         # TODO: As filters are set (lose focus?) update the number of hits?
         # TODO: Only apply filters if they're changed (one might open the filter view to only see the filters).
+        # TODO: Checkboxes don't work, all of a sudden. Prob after the deepcopy-trick.
+
+        # Alter a copy of the current settings and only apply them if instructed by the user
+        native_filters = self.convert_filters_to_native_types()  # copy.deepcopy() doesn't understand tk.IntVars
+        native_filters_deepcopy = copy.deepcopy(native_filters)
+        filters_copy = self.convert_filters_to_tk_specific_datatypes(native_filters_deepcopy)
 
         ############################################
         # Create a window to display everything in #
         ############################################
         filter_window = tk.Toplevel()
-        #self.center_window(filter_window)
         filter_window.bind("<Escape>", lambda event=None: filter_window.destroy())
         filter_window.wm_title("Filter dataset")
+        filter_window.geometry("400x500")
 
         # A frame to hold the filtering options
-        filter_frame = ttk.Frame(filter_window, borderwidth=1, relief=tk.SOLID)
+        filter_frame = ttk.Frame(filter_window, padding=(0, 0, 0, 100))
         filter_frame.grid(column=0, row=0, sticky="NEWS")
         filter_frame.focus_force()  # Force focus to a widget in this window so that binds work
 
         # A frame on the bottom to hold the buttons
-        button_frame = ttk.Frame(filter_window, borderwidth=1, relief=tk.SOLID)
-        button_frame.grid(column=0, row=1, sticky="SEW")
+        button_frame = ttk.Frame(filter_window)
+        button_frame.grid(column=0, row=1, sticky="NEWS")
 
         # Set weights for the rows so that filter frame expands, but not button frame.
         filter_window.rowconfigure(0, weight=1)
         filter_window.columnconfigure(0, weight=1)
         filter_frame.columnconfigure(0, weight=1)
 
-        # Validation functions
-        validate_positive_integer = (self.register(self.validate_positive_integer), "%P")
-        validate_positive_float = (self.register(self.validate_positive_float), "%P")
+        # Add a statusbar to the filters window
+        filter_statusbar = ttk.Frame(filter_window, borderwidth=1, relief=tk.SUNKEN)
+        filter_statusbar.grid(column=0, row=2, sticky="NEWS")
+        self.filter_statusbar_label = ttk.Label(filter_statusbar, text="All filters are valid", font="tkDefaultFont")
+        self.filter_statusbar_label.grid(column=0, row=0, sticky="NEWS")
+
+        # Validation functions (see http://infohost.nmt.edu/tcc/help/pubs/tkinter/web/entry-validation.html)
+        validate_positive_integer = (self.register(self.validate_positive_integer), "%P", "%W", "%d", "%V")
+        validate_positive_float = (self.register(self.validate_positive_float), "%P", "%W", "%d", "%V")
 
         # Keep track of the rows we've assigned stuff to in the filter frame
         current_filter_row = 0
@@ -514,17 +532,18 @@ class TINTagger(tk.Tk):
         #################
 
         # Filter entry for included counts
-        inc_counts_frame = ttk.Frame(filter_frame, borderwidth=1, relief=tk.SOLID)
+        inc_counts_frame = ttk.Frame(filter_frame)
         inc_counts_frame.grid(column=0, row=current_filter_row, sticky="NEWS")
         inc_counts_label = ttk.Label(inc_counts_frame, text="Min. included counts:")
         inc_counts_label.grid(column=0, row=0, sticky="NEWS")
         inc_counts_entry = ttk.Entry(
             inc_counts_frame,
-            textvariable=self.filters["included_counts"],
+            textvariable=filters_copy["included_counts"],
             exportselection=0,
             justify=tk.LEFT,
             validatecommand=validate_positive_integer,
-            validate="focusout"
+            validate="all",
+            name="included_counts_filter"
         )
         inc_counts_entry.grid(column=1, row=0, sticky="NEWS")
         inc_counts_frame.columnconfigure(1, weight=1)
@@ -532,17 +551,18 @@ class TINTagger(tk.Tk):
         current_filter_row += 1
 
         # Filter entry for excluded counts
-        excl_counts_frame = ttk.Frame(filter_frame, borderwidth=1, relief=tk.SOLID)
+        excl_counts_frame = ttk.Frame(filter_frame)
         excl_counts_frame.grid(column=0, row=current_filter_row, sticky="NEWS")
         excl_counts_label = ttk.Label(excl_counts_frame, text="Min. excluded counts:")
         excl_counts_label.grid(column=0, row=0, sticky="NEWS")
         excl_counts_entry = ttk.Entry(
             excl_counts_frame,
-            textvariable=self.filters["excluded_counts"],
+            textvariable=filters_copy["excluded_counts"],
             exportselection=0,
             justify=tk.LEFT,
             validatecommand=validate_positive_integer,
-            validate="focusout"
+            validate="all",
+            name="excluded_counts_filter"
         )
         excl_counts_entry.grid(column=1, row=0, sticky="NEWS")
         excl_counts_frame.columnconfigure(1, weight=1)
@@ -550,17 +570,18 @@ class TINTagger(tk.Tk):
         current_filter_row += 1
 
         # Filter entry for PSI
-        psi_frame = ttk.Frame(filter_frame, borderwidth=1, relief=tk.SOLID)
+        psi_frame = ttk.Frame(filter_frame)
         psi_frame.grid(column=0, row=current_filter_row, sticky="NEWS")
         psi_label = ttk.Label(psi_frame, text="Min. PSI:")
         psi_label.grid(column=0, row=0)
         psi_entry = ttk.Entry(
             psi_frame,
-            textvariable=self.filters["psi"],
+            textvariable=filters_copy["psi"],
             exportselection=0,
             justify=tk.LEFT,
             validatecommand=validate_positive_float,
-            validate="focusout"
+            validate="all",
+            name="psi_filter"
         )
         psi_entry.grid(column=1, row=0, sticky="NEWS")
         psi_frame.columnconfigure(1, weight=1)
@@ -568,17 +589,18 @@ class TINTagger(tk.Tk):
         current_filter_row += 1
 
         # Filter entry for gene RPKM
-        rpkm_frame = ttk.Frame(filter_frame, borderwidth=1, relief=tk.SOLID)
+        rpkm_frame = ttk.Frame(filter_frame)
         rpkm_frame.grid(column=0, row=current_filter_row, sticky="NEWS")
         rpkm_label = ttk.Label(rpkm_frame, text="Min. gene RPKM:")
         rpkm_label.grid(column=0, row=0)
         rpkm_entry = ttk.Entry(
             rpkm_frame,
-            textvariable=self.filters["rpkm"],
+            textvariable=filters_copy["rpkm"],
             exportselection=0,
             justify=tk.LEFT,
             validatecommand=validate_positive_float,
-            validate="focusout"
+            validate="all",
+            name="rpkm_filter"
         )
         rpkm_entry.grid(column=1, row=0, sticky="NEWS")
         rpkm_frame.columnconfigure(1, weight=1)
@@ -586,7 +608,7 @@ class TINTagger(tk.Tk):
         current_filter_row += 1
 
         # Filter choices for splice types
-        splice_type_frame = ttk.Frame(filter_frame, borderwidth=1, relief=tk.SOLID)
+        splice_type_frame = ttk.Frame(filter_frame)
         splice_type_frame.grid(column=0, row=current_filter_row, sticky="NEWS")
         splice_type_label = ttk.Label(splice_type_frame, text="Splice types:")
         # Keep track of splice type row
@@ -595,13 +617,13 @@ class TINTagger(tk.Tk):
         current_splice_type_row += 1
 
         # Setup checkboxes
-        for splice_type in sorted(self.filters["splice_type"].keys()):
+        for splice_type in sorted(filters_copy["splice_type"].keys()):
             # Set on or off
-            self.filters["splice_type"][splice_type]["enabled_var"].set(self.filters["splice_type"][splice_type]["enabled"])
+            filters_copy["splice_type"][splice_type]["enabled_var"].set(filters_copy["splice_type"][splice_type]["enabled"])
             check_button = ttk.Checkbutton(
                 splice_type_frame,
-                text=self.filters["splice_type"][splice_type]["description"],
-                variable=self.filters["splice_type"][splice_type]["enabled_var"],
+                text=filters_copy["splice_type"][splice_type]["description"],
+                variable=filters_copy["splice_type"][splice_type]["enabled_var"],
                 onvalue=1,
                 offvalue=1
             )
@@ -610,38 +632,92 @@ class TINTagger(tk.Tk):
 
         current_filter_row += 1
 
-        # Add Apply and Cancel buttons
+        ################################
+        # Add Apply and Cancel buttons #
+        ################################
         cancel_button = ttk.Button(button_frame, text="Cancel", command=filter_window.destroy)
-        cancel_button.grid(column=0, row=0, sticky="NSW")
-        apply_button = ttk.Button(button_frame, text="Apply", command=self.apply_filters)
-        apply_button.grid(column=1, row=0, sticky="ENS")
+        cancel_button.grid(column=0, row=0, sticky="E")
+        #self.apply_button = ttk.Button(button_frame, text="Apply", command=self.apply_filters)
+        self.apply_button = ttk.Button(button_frame, text="Apply", command=lambda: self.apply_filters(filters_copy))
+        self.apply_button.grid(column=1, row=0, sticky="E")
         button_frame.columnconfigure(0, weight=1)
-        button_frame.columnconfigure(1, weight=1)
+        #button_frame.columnconfigure(1, weight=1)
 
-    def validate_positive_integer(self, string_value):
+    def validate_positive_integer(self, string_value, widget_name, edit_type, edit_reason):
         """
         Validates entry fields. Returns true if the text represents a positive integer, false if not.
         """
+        style = ttk.Style()
+        style.configure("Red.TEntry", foreground=COLOR_RED)
+        style.configure("Green.TEntry", foreground=COLOR_GREEN)
+        widget = self.nametowidget(widget_name)
+        short_name = widget_name.split(".")[-1]
+        self.valid_filters[short_name] = 1
+
+        # Check if the new value will be a positive integer
         if string_value.isdigit():
-            return int(string_value) >= 0
+            # Valid (note that isdigit() returns false for negative values
+            if edit_reason == "focusout":
+                widget.configure(style="TEntry")
+            else:
+                widget.configure(style="Green.TEntry")
+        else:
+            # Invalid
+            widget.configure(style="Red.TEntry")
+            self.filter_statusbar_label["text"] = "Invalid filter: Must be positive integer."
+            self.valid_filters[short_name] = 0
 
-        # It's either not an int at all or a negative int
-        tkMessageBox.showerror("Filter error", "Only positive integers allowed (e.g. '10', not '10.0' or '-10')")
-        return False
+        # If all filters are valid, enable the apply-button
+        if all(valid == 1 for valid in self.valid_filters.values()):
+            self.filter_statusbar_label["text"] = "All filters are valid"
+            self.apply_button["state"] = "enabled"
+        else:
+            self.apply_button["state"] = "disabled"
+            if edit_reason == "focusin":
+                self.filter_statusbar_label["text"] = "There are invalid filters."
 
-    def validate_positive_float(self, string_value):
+        return True
+
+    def validate_positive_float(self, string_value, widget_name, edit_type, edit_reason):
         """
         Validates entry fields. Returns true if the text represents a positive float, false if not.
         """
+        style = ttk.Style()
+        style.configure("Red.TEntry", foreground=COLOR_RED)
+        style.configure("Green.TEntry", foreground=COLOR_GREEN)
+        widget = self.nametowidget(widget_name)
+        short_name = widget_name.split(".")[-1]
+        self.valid_filters[short_name] = 1
+
         try:
             float_val = float(string_value)
             if float_val >= 0.0:
-                return True
+                # Valid
+                if edit_reason == "focusout":
+                    widget.configure(style="TEntry")
+                else:
+                    widget.configure(style="Green.TEntry")
             else:
-                return False
+                # Invalid
+                self.valid_filters[short_name] = 0
+                widget.configure(style="Red.TEntry")
+                self.filter_statusbar_label["text"] = "Invalid filter: Negative values not allowed."
+
         except ValueError:
-            tkMessageBox.showerror("Filter error", "Only positive floats allowed (e.g. '2.0', not '-2.0' or 'two point zero')")
-            return False
+            # Invalid
+            self.valid_filters[short_name] = 0
+            self.filter_statusbar_label["text"] = "Invalid filter: Non-negative floats only (e.g. 4.65)"
+            widget.configure(style="Red.TEntry")
+
+        # Enable or disable apply-button
+        if all(valid == 1 for valid in self.valid_filters.values()):
+            self.filter_statusbar_label["text"] = "All filters are valid"
+            self.apply_button["state"] = "enabled"
+        else:
+            self.apply_button["state"] = "disabled"
+            if edit_reason == "focusin":
+                self.filter_statusbar_label["text"] = "There are invalid filters."
+        return True
 
     def get_default_filters(self):
         """
@@ -733,21 +809,26 @@ class TINTagger(tk.Tk):
 
             # Check if everything went OK (i.e. that None was not returned)
             if raw_filters:
-                # Convert native datatypes to tk-specific datatypes in the filters and set to self.filters
-                self.convert_filters_to_tk_specific_datatypes(raw_filters)
-
+                # Convert native datatypes to tk-specific datatypes
+                converted_filters = self.convert_filters_to_tk_specific_datatypes(raw_filters)
+                self.filters = converted_filters
                 # Apply current filters
                 self.apply_filters()
             else:
                 print "Error when loading filters from file."
                 self.set_statusbar_text("Filters not loaded: Something went wrong when loading filters from file.")
 
-    def apply_filters(self):
+    def apply_filters(self, filters=None):
         """
         Applies the currently active filter. Calls the TINDataProcessor to return a filtered dataset and updates
         self.dataset to reflect the changes. Also resets the self.current_row_index to 0. Finally, calls
         self.update_information() to update the UI.
         """
+
+        # If filters are passed in, assign them to self.filters first
+        if filters:
+            print "Apply() got filters."
+            self.filters = filters
 
         # Convert current filters to native datatypes
         native_filters = self.convert_filters_to_native_types()
@@ -798,7 +879,7 @@ class TINTagger(tk.Tk):
     def convert_filters_to_tk_specific_datatypes(self, filters):
         """
         Converts certain dataset filter entries to tk-specific datatypes (e.g. tk.IntVar(), tk.StringVar()) from their
-        native python datatype representation. When done, assigns the converted filter to self.filters.
+        native python datatype representation. Returns the converted filters.
         """
 
         # Initialize variables as tk-specific datatypes
@@ -826,7 +907,7 @@ class TINTagger(tk.Tk):
 
         tk_specific["splice_type"] = splice_types
 
-        self.filters = tk_specific
+        return tk_specific
 
     def center_window(self, window):
         """
