@@ -1068,12 +1068,15 @@ class TINTagger(tk.Tk):
         # Clear all canvases before drawing new ones
         self.clear_all_canvases()
 
+        # Also clear exon frame before creating new buttons
+        self.exon_frame.destroy()
+        self.exon_frame = self.create_exon_frame()
+
         # Draw events
         if data["splice_type"] == "AT":
             self.draw_alternative_terminator_event(data)
         elif data["splice_type"] == "ES":
-            #self.draw_exon_skipping_events(data)
-            self.exon_skipping_new(data)
+            self.draw_exon_skipping_event(data)
         elif data["splice_type"] == "AD":
             self.draw_alternative_donor_events(data)
 
@@ -1403,126 +1406,6 @@ class TINTagger(tk.Tk):
             # For this to look nice, the sample_frame needs a 1-wide padding at the bottom.
             # END TEST
 
-    def draw_exon_skipping_events(self, data):
-        """
-        Draw exons using canvas instead of frame (one canvas per row, so x, y coordinates are the same for each sample
-        """
-
-        # Fill in samples information column
-        self.populate_samples_frame(data)
-
-        # Get strand information to know which way to draw exons
-        strand = data["strand"]
-
-        # Keep track of row number
-        row_number = 0
-
-        # First, draw a top frame containing exon names
-        exons = sorted(data["samples"].values()[0]["exons"].keys(), key=natural_sort_key)
-        if strand == "-":
-            exons.reverse()
-        exon_name_frame = ttk.Frame(self.exon_frame)
-        exon_name_frame.grid(column=0, row=row_number, sticky="NEW")
-        # Get names of exons
-        exon_column = 0
-        for exon_name in exons:
-            # Create label for this exon
-            exon_font = "tkDefaultFont 16"
-            if exon_name == data["exons"]:
-                exon_font = "tkDefaultFont 16 bold"
-            exon_text = exon_name
-            if len(exon_name) > 15:
-                exon_text = exon_name[:14] + ".."
-            exon_label = ttk.Label(exon_name_frame, text=exon_text, anchor=tk.CENTER, font=exon_font)
-            exon_label.grid(row=0, column=exon_column, sticky="NEWS")
-            exon_name_frame.columnconfigure(exon_column, weight=1)
-            exon_column += 1
-
-        # TEST: Horizontal separator
-        sep = ttk.Separator(self.exon_frame, orient=tk.HORIZONTAL)
-        sep.grid(column=0, row=row_number, sticky="EWS")
-        # END TEST
-
-        row_number += 1
-
-        # Draw exons for each sample
-        for sample_name in sorted(data["samples"].keys(), key=natural_sort_key):
-
-            # Get data for this sample
-            sample_data = data["samples"][sample_name]
-            # Get sample exons
-            sample_exons = sorted(sample_data["exons"].keys(), key=natural_sort_key)
-            # Reverse exons if we're on the minus trand
-            if strand == "-":
-                sample_exons.reverse()
-
-            # Dimension variables
-            canvas_width = 300
-            canvas_height = 100
-            width_per_exon_container = canvas_width / 3
-            x_offset = 0  # This will increase with width_per_exon_container for each exon drawn
-            exon_width = 60
-            exon_height = 80
-            exon_start_y = (canvas_height - exon_height) / 2
-
-            # Highlight background for sample of interest
-            canvas_background = COLOR_WHITE
-            if sample_name == data["sample_of_interest"]:
-                canvas_background = COLOR_LIGHTRED
-
-            # Initialize canvas and grid it to this row in the center frame.
-            row_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=canvas_height)
-            row_canvas.grid(row=row_number, column=0, sticky="NEWS")
-            self.exon_frame.columnconfigure(0, weight=1)
-
-            # Keep track of canvases used
-            self.canvases.append(row_canvas)
-
-            # Set even weight for every row in the center-frame
-            self.exon_frame.rowconfigure(row_number, weight=1)
-
-            # exon_number = 0  # Do I not need this?
-            for exon_name in sample_exons:
-                exon_data = sample_data["exons"][exon_name]
-                coverage = exon_data["coverage"]
-                max_coverage = exon_data["max_coverage"]
-                percent_of_max_coverage = (float(coverage) / float(max_coverage)) * 100
-
-                # Update exon start position
-                exon_start_x = x_offset + ((width_per_exon_container - exon_width) / 2)  # /2 because there's padding at both side
-
-                # TEST: Highlight exon of interest
-                rect_width = 1
-                rect_dash = None
-                outline_color = COLOR_DARKBLUE
-                if exon_name == data["exons"] and sample_name == data["sample_of_interest"]:
-                    rect_width = 3
-                    #rect_dash = (5, 5)
-                    outline_color = COLOR_DARKBLUE
-
-                # Draw background rectangle
-                row_canvas.create_rectangle(exon_start_x, exon_start_y, exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=outline_color, width=rect_width, dash=rect_dash)
-
-                # Draw fill rectangle based on relative coverage
-                fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
-                fill_end_y = exon_start_y + exon_height
-                row_canvas.create_rectangle(exon_start_x, fill_start_y, exon_start_x + exon_width, fill_end_y, fill=COLOR_BLUE, outline=outline_color, width=rect_width, dash=rect_dash)
-
-                # Draw coverage text (text shadow first)
-                text_start_x = exon_start_x + (exon_width / 2)
-                text_start_y = exon_height - 10
-                text_color = COLOR_WHITE
-                #row_canvas.create_text(text_start_x + 1, text_start_y + 1, anchor=tk.CENTER, text=str(coverage), font="tkDefaultFont 16", fill=shadow_color)
-                row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(coverage), tags="text_shadow", font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW)
-
-                row_canvas.create_text(text_start_x, text_start_y, anchor=tk.CENTER, text=str(coverage), font="tkDefaultFont 16", fill=text_color)
-
-                # Increment x_offset
-                x_offset += width_per_exon_container
-
-            # Increment row number
-            row_number += 1
-
     def draw_alternative_donor_events(self, data):
         """
         Draws alternative donor site events.
@@ -1779,11 +1662,10 @@ class TINTagger(tk.Tk):
         button_frame.rowconfigure(2, weight=1)
         # END tagging buttons
 
-    def exon_skipping_new(self, data):
+    def draw_exon_skipping_event(self, data):
         """
         Draw exon skipping events
         """
-        # TODO: Rename this function
         ######################################
         # Fill in samples information column #
         ######################################
