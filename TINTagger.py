@@ -13,6 +13,8 @@ from TINDataProcessor import TINDataProcessor
 
 # TODO: Cache rows so we don't need to run samtools etc when pressing previous-button
 # TODO: Find PSI, included counts, excluded counts for other exons and display if it's available (gonna be an sql-call).
+# TODO: Add UI for tagging-buttons as separate function, so I don't have to write it for every splicing event type.
+# TODO: Add separators between sample rows
 
 """
 ################################################
@@ -43,6 +45,7 @@ COLOR_DARKBLUE = "#34495e"
 COLOR_PURPLE = "#9b59b6"
 COLOR_LIGHTRED = "#ffe5e2"
 COLOR_DARKWHITE = "#bdc3c7"
+COLOR_GRAY = "#95a5a6"
 COLOR_DARKGRAY = "#7f8c8d"
 COLOR_ORANGE = "#e67e22"
 COLOR_CANVAS_TEXT = COLOR_WHITE
@@ -274,7 +277,7 @@ class TINTagger(tk.Tk):
         """
         The exon frame is part of the left frame and contains the exon names and the exon canvases
         """
-        exon_frame = ttk.Frame(self.left_frame, padding=0, borderwidth=1, relief=tk.SOLID)
+        exon_frame = ttk.Frame(self.left_frame, padding=0, borderwidth=0, relief=tk.SOLID)
         exon_frame.grid(column=1, row=0, sticky="NEWS")
 
         return exon_frame
@@ -949,15 +952,15 @@ class TINTagger(tk.Tk):
         style.configure(STYLE_BUTTON_UNCERTAIN_ON, foreground=COLOR_UNCERTAIN, font="tkDefaultFont 16 bold")
         style.map(
             STYLE_BUTTON_INTERESTING_OFF,
-            foreground=[("active", COLOR_DARKBLUE)],
+            foreground=[("active", COLOR_DARKBLUE), ("disabled", COLOR_DARKWHITE)]
         )
         style.map(
             STYLE_BUTTON_NOT_INTERESTING_OFF,
-            foreground=[("active", COLOR_DARKBLUE)]
+            foreground=[("active", COLOR_DARKBLUE), ("disabled", COLOR_DARKWHITE)]
         )
         style.map(
             STYLE_BUTTON_UNCERTAIN_OFF,
-            foreground=[("active", COLOR_DARKBLUE)]
+            foreground=[("active", COLOR_DARKBLUE), ("disabled", COLOR_DARKWHITE)]
         )
         style.map(
             STYLE_BUTTON_INTERESTING_ON,
@@ -1396,6 +1399,13 @@ class TINTagger(tk.Tk):
 
             row_number += 1
 
+            # TEST: Draw separator
+            #sep = tk.Frame(self.sample_frame, bg=COLOR_DARKWHITE, height=2)
+            #sep.grid(row=row_number, column=0, sticky="NEWS")
+            #row_number+=1
+            # For this to look nice, the sample_frame needs a 1-wide padding at the bottom.
+            # END TEST
+
     def draw_exon_skipping_events(self, data):
         """
         Draw exons using canvas instead of frame (one canvas per row, so x, y coordinates are the same for each sample
@@ -1780,25 +1790,38 @@ class TINTagger(tk.Tk):
         for sample_name in sorted(data["samples"].keys(), key=natural_sort_key):
             sample_data = data["samples"][sample_name]
 
+            # Check if the event is reported for this sample
+            is_reported = sample_data["is_reported"]
+
             # Get sample exons
             upstream_exon = sample_data["exons"]["upstream_exon"]
             main_exon = sample_data["exons"]["exon_of_interest"]
             downstream_exon = sample_data["exons"]["downstream_exon"]
 
-            # Highlight background for sample of interest
+            # Setup colors
             canvas_background = "white"
+            exon_color = COLOR_BLUE
+            exon_bordercolor = COLOR_DARKBLUE
+
+            # Highlight background for sample of interest
             if sample_name == data["sample_of_interest"]:
                 canvas_background = COLOR_SAMPLE_HIGHLIGHT
 
+            # If event is not reported, draw monochrome canvas
+            if not is_reported:
+                #canvas_background = COLOR_DARKWHITE
+                exon_color = COLOR_DARKGRAY
+                exon_bordercolor = COLOR_DARKGRAY
+
             # Initialize canvas and grid to this row in the exon frame
-            # TODO: Dark / Monochrome colors if sample_data["is_reported"] is False
             row_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=canvas_height)
             row_canvas.grid(row=row_number, column=0, sticky="NEWS")
+            # Keep track of canvases used
+            self.canvases.append(row_canvas)
 
             #########################
             # Setup tagging buttons #
             #########################
-            # TODO: Update button frame and button color depending on sample tag and algo-tag
             sample_tag = sample_data["event_tag"]
             # TEST: Algo tag
             test = random.randint(0, 2)
@@ -1807,8 +1830,11 @@ class TINTagger(tk.Tk):
                 algo_tag_color = COLOR_NOT_INTERESTING
             if test == 0:
                 algo_tag_color = COLOR_UNCERTAIN
+
+            if not is_reported:
+                algo_tag_color = COLOR_DARKWHITE
             # END TEST: Algo tag
-            button_frame = tk.Frame(self.exon_frame, bg=algo_tag_color, padx=5, pady=0, borderwidth=0, relief=tk.SOLID)
+            button_frame = tk.Frame(self.exon_frame, bg=algo_tag_color, padx=2, pady=0, borderwidth=0, relief=tk.SOLID)
             button_frame.grid(row=row_number, column=1, sticky="NEWS")
             # Tag interesting button
             up_button_style = STYLE_BUTTON_INTERESTING_ON if sample_tag == TAG_INTERESTING else STYLE_BUTTON_INTERESTING_OFF
@@ -1839,18 +1865,26 @@ class TINTagger(tk.Tk):
             down_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_NOT_INTERESTING, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
             uncertain_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_UNCERTAIN, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
 
+            # Disable buttons if the event is not reported for this sample
+            if not is_reported:
+                up_button.state(["disabled"])
+                down_button.state(["disabled"])
+                uncertain_button.state(["disabled"])
+
             button_frame.rowconfigure(0, weight=1)
             button_frame.rowconfigure(1, weight=1)
             button_frame.rowconfigure(2, weight=1)
-            # END TEST
-
-            # TODO: Set button pressed colors according to sample tag
-
-            # Keep track of canvases used
-            self.canvases.append(row_canvas)
 
             # Set even weight for every row in the exon frame
             self.exon_frame.rowconfigure(row_number, weight=1)
+
+            # TEST: Add separator
+            row_number += 1
+            sep = tk.Frame(self.exon_frame, bg=COLOR_DARKWHITE, height=2)
+            sep.grid(row=row_number, column=0, sticky="NEWS")
+            button_sep = tk.Frame(self.exon_frame, bg=COLOR_DARKWHITE, height=2)
+            button_sep.grid(row=row_number, column=1, sticky="NEWS")
+            # END TEST
 
             ######################
             # Draw upstream exon #
@@ -1862,12 +1896,12 @@ class TINTagger(tk.Tk):
             upstream_exon_start_x = (width_per_exon_container - exon_width) / 2
 
             # Draw exon background
-            row_canvas.create_rectangle(upstream_exon_start_x, exon_start_y, upstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background)
+            row_canvas.create_rectangle(upstream_exon_start_x, exon_start_y, upstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
 
             # Draw exon fill
             fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
             fill_end_y = exon_start_y + exon_height
-            row_canvas.create_rectangle(upstream_exon_start_x, fill_start_y, upstream_exon_start_x + exon_width, fill_end_y, fill=COLOR_BLUE, outline=COLOR_DARKBLUE)
+            row_canvas.create_rectangle(upstream_exon_start_x, fill_start_y, upstream_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor)
 
             # Draw coverage text
             text_start_x = upstream_exon_start_x + (exon_width / 2)
@@ -1889,11 +1923,11 @@ class TINTagger(tk.Tk):
                 border_width = 3
 
             # Draw exon background
-            row_canvas.create_rectangle(main_exon_start_x, exon_start_y, main_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, width=border_width)
+            row_canvas.create_rectangle(main_exon_start_x, exon_start_y, main_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor, width=border_width)
 
             # Draw exon fill
             fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
-            row_canvas.create_rectangle(main_exon_start_x, fill_start_y, main_exon_start_x + exon_width, fill_end_y, fill=COLOR_BLUE, outline=COLOR_DARKBLUE, width=border_width)
+            row_canvas.create_rectangle(main_exon_start_x, fill_start_y, main_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor, width=border_width)
 
             # Draw coverage text
             text_start_x = main_exon_start_x + (exon_width / 2)
@@ -1910,11 +1944,11 @@ class TINTagger(tk.Tk):
             downstream_exon_start_x = main_exon_start_x + width_per_exon_container
 
             # Draw exon background
-            row_canvas.create_rectangle(downstream_exon_start_x, exon_start_y, downstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background)
+            row_canvas.create_rectangle(downstream_exon_start_x, exon_start_y, downstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
 
             # Draw exon fill
             fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
-            row_canvas.create_rectangle(downstream_exon_start_x, fill_start_y, downstream_exon_start_x + exon_width, fill_end_y, fill=COLOR_BLUE, outline=COLOR_DARKBLUE)
+            row_canvas.create_rectangle(downstream_exon_start_x, fill_start_y, downstream_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor)
 
             # Draw coverage text
             text_start_x = downstream_exon_start_x + (exon_width / 2)

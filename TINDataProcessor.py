@@ -56,6 +56,10 @@ class TINDataProcessor(object):
         # Read into pandas dataframe
         df = pd.read_csv(filepath, dtype=datatypes, sep=delimiter)
 
+        # Trim .0 from exon names
+        df.exon1 = df.exon1.str.replace("\.0$", "")
+        df.exon2 = df.exon2.str.replace("\.0$", "")
+
         # TODO: Don't do this; return full dataset
         df = df.loc[df.splice_type == "ES"]
 
