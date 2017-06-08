@@ -132,7 +132,6 @@ class TINTagger(tk.Tk):
         if self.testing:
             # Mac ghetto-fix for bringing GUI to front when running.
             os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
-            pass
 
         #####################
         # Various variables #
@@ -159,6 +158,9 @@ class TINTagger(tk.Tk):
             "AT": "Alternative terminator",
             "AP": "Alternative promoter"
         }
+
+        # Paths to bam files
+        self.bam_paths = self.data_processor.get_bam_file_paths()
 
         # Default filter options
         self.filters = self.get_default_filters()
@@ -1161,8 +1163,8 @@ class TINTagger(tk.Tk):
                 samples_data[s_name] = {}
 
             # Find if sample is reported by SpliceSeq or not
-            is_reported = self.data_processor.is_event_reported_in_sample(sample_name, as_id, self.dataset)
-            samples_data["is_reported"] = is_reported
+            is_reported = self.data_processor.is_event_reported_in_sample(s_name, as_id, self.dataset)
+            samples_data[s_name]["is_reported"] = is_reported
             # Default to sample not being tagged
             sample_tag = TAG_NO_TAG
             # Default to RPKM being 0 (in case it's not reported)
@@ -1170,6 +1172,7 @@ class TINTagger(tk.Tk):
 
             if is_reported:
                 gene_rpkm = self.data_processor.get_gene_rpkm_by_sample_name(s_name, gene_symbol, self.dataset)
+                print "TYPE gene_rpkm:", type(gene_rpkm)
                 sample_tag = self.data_processor.get_sample_tag_by_as_id(s_name, as_id, self.dataset)
 
             samples_data[s_name]["gene_rpkm"] = gene_rpkm

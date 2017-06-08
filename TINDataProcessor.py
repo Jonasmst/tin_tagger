@@ -60,6 +60,8 @@ class TINDataProcessor(object):
         df = df.loc[df.splice_type == "ES"]
 
         # TODO: Count occurrences if not already done
+        if "occurrences" not in list(df.columns):
+            df["occurrences"] = df.groupby("as_id")["name"].transform(len)
 
         return df
 
@@ -144,7 +146,7 @@ class TINDataProcessor(object):
         Returns the gene RPKM value for a given gene in a given sample.
         """
         try:
-            gene_rpkm = dataset.loc[(dataset["symbol"] == gene_symbol) & (dataset["name"] == sample_name)].iloc[0]
+            gene_rpkm = dataset.loc[(dataset["symbol"] == gene_symbol) & (dataset["name"] == sample_name)]["rpkm"].iloc[0]
             return gene_rpkm
         except IndexError:
             # Data not found for this sample/gene
@@ -172,6 +174,20 @@ class TINDataProcessor(object):
                 print samtools_output
 
             return region_coverage
+
+    def get_bam_file_paths(self):
+        """
+        Returns a dictionary where keys are sample names and values are the path to that sample's BAM-file.
+        """
+        # TODO: Read this from a file or something
+        # TODO: Should the DataProcessor take care of these paths, rather than the main app? Affects coverage-func.
+        bam_directory = "/tsd/p19/data/durable/Projects/CRC-RNA-Seq/hisat2/transcriptome"
+        bam_paths = {}
+
+        for x in range(1, 11):
+            bam_paths["sample%s" % str(x)] = os.path.join(bam_directory, "%s.sorted.bam" % str(x))
+
+        return bam_paths
 
 
 
