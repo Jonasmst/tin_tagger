@@ -59,9 +59,12 @@ TAG_NOT_INTERESTING = 1
 TAG_UNCERTAIN = 2
 TAG_NO_TAG = -1
 
-STYLE_BUTTON_INTERESTING = "Interesting.TButton"
-STYLE_BUTTON_NOT_INTERESTING = "Not_interesting.TButton"
-STYLE_BUTTON_UNCERTAIN = "Uncertain.TButton"
+STYLE_BUTTON_INTERESTING_ON = "InterestingOn.TButton"
+STYLE_BUTTON_NOT_INTERESTING_ON = "Not_interestingOn.TButton"
+STYLE_BUTTON_UNCERTAIN_ON = "UncertainOn.TButton"
+STYLE_BUTTON_INTERESTING_OFF = "InterestingOff.TButton"
+STYLE_BUTTON_NOT_INTERESTING_OFF = "Not_interestingOff.TButton"
+STYLE_BUTTON_UNCERTAIN_OFF = "UncertainOff.TButton"
 
 
 def natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
@@ -186,6 +189,10 @@ class TINTagger(tk.Tk):
         #################################
         # Draw graphical user interface #
         #################################
+
+        # Prepare visual styles
+        self.setup_ttk_styles()
+
         # Create a menu
         self.create_menu()
 
@@ -929,6 +936,42 @@ class TINTagger(tk.Tk):
 
         window.geometry("%dx%d+%d+%d" % (size + (x_coord, y_coord)))
 
+    def setup_ttk_styles(self):
+        """
+        Prepares ttk.Style() attributes for buttons, frames, etc.
+        """
+        style = ttk.Style()
+        style.configure(STYLE_BUTTON_INTERESTING_OFF, foreground=COLOR_DARKBLUE)
+        style.configure(STYLE_BUTTON_NOT_INTERESTING_OFF, foreground=COLOR_DARKBLUE)
+        style.configure(STYLE_BUTTON_UNCERTAIN_OFF, foreground=COLOR_DARKBLUE, font="tkDefaultFont 16 bold")
+        style.configure(STYLE_BUTTON_INTERESTING_ON, foreground=COLOR_INTERESTING)
+        style.configure(STYLE_BUTTON_NOT_INTERESTING_ON, foreground=COLOR_NOT_INTERESTING)
+        style.configure(STYLE_BUTTON_UNCERTAIN_ON, foreground=COLOR_UNCERTAIN, font="tkDefaultFont 16 bold")
+        style.map(
+            STYLE_BUTTON_INTERESTING_OFF,
+            foreground=[("active", COLOR_DARKBLUE)],
+        )
+        style.map(
+            STYLE_BUTTON_NOT_INTERESTING_OFF,
+            foreground=[("active", COLOR_DARKBLUE)]
+        )
+        style.map(
+            STYLE_BUTTON_UNCERTAIN_OFF,
+            foreground=[("active", COLOR_DARKBLUE)]
+        )
+        style.map(
+            STYLE_BUTTON_INTERESTING_ON,
+            foreground=[("active", COLOR_INTERESTING)]
+        )
+        style.map(
+            STYLE_BUTTON_NOT_INTERESTING_ON,
+            foreground=[("active", COLOR_NOT_INTERESTING)]
+        )
+        style.map(
+            STYLE_BUTTON_UNCERTAIN_ON,
+            foreground=[("active", COLOR_UNCERTAIN)]
+        )
+
     def open_file(self):
         """
         Presents a filedialog for the user to choose a file. If a file is selected, the dataset is read
@@ -1172,7 +1215,6 @@ class TINTagger(tk.Tk):
 
             if is_reported:
                 gene_rpkm = self.data_processor.get_gene_rpkm_by_sample_name(s_name, gene_symbol, self.dataset)
-                print "TYPE gene_rpkm:", type(gene_rpkm)
                 sample_tag = self.data_processor.get_sample_tag_by_as_id(s_name, as_id, self.dataset)
 
             samples_data[s_name]["gene_rpkm"] = gene_rpkm
@@ -1635,10 +1677,43 @@ class TINTagger(tk.Tk):
         # Expand exon frame horizontally
         self.exon_frame.columnconfigure(0, weight=1)
 
+    def tag_button_clicked(self, sample_name, as_id, new_tag, up_button, down_button, uncertain_button):
+        """
+        Triggered when a tag button is clicked. Updates button styles and stores the new tag in the dataset.
+        """
+
+        # Get current tag for this sample and as_id
+        current_tag = self.data_processor.get_tag_by_sample_name_and_as_id(sample_name, as_id, self.dataset)
+
+        # This is the tag to be changed in the dataset
+        set_tag = new_tag
+
+        # If the current tag is the same as it was, then we'll "toggle" the tag back to not being tagged.
+        if current_tag == new_tag:
+            set_tag = TAG_NO_TAG
+
+        # Update the dataset
+        self.data_processor.set_tag_by_sample_name_and_as_id(set_tag, sample_name, as_id, self.dataset)
+
+        # Clear all button styles
+        up_button.configure(style=STYLE_BUTTON_INTERESTING_OFF)
+        down_button.configure(style=STYLE_BUTTON_NOT_INTERESTING_OFF)
+        uncertain_button.configure(style=STYLE_BUTTON_UNCERTAIN_OFF)
+
+        # If it's a toggle (the old and the new are the same), we don't activate any buttons.
+        if current_tag != new_tag:
+            if new_tag == TAG_INTERESTING:
+                up_button.configure(style=STYLE_BUTTON_INTERESTING_ON)
+            elif new_tag == TAG_NOT_INTERESTING:
+                down_button.configure(style=STYLE_BUTTON_NOT_INTERESTING_ON)
+            elif new_tag == TAG_UNCERTAIN:
+                uncertain_button.configure(style=STYLE_BUTTON_UNCERTAIN_ON)
+
     def exon_skipping_new(self, data):
         """
         Draw exon skipping events
         """
+        # TODO: Rename this function
         ######################################
         # Fill in samples information column #
         ######################################
@@ -1647,6 +1722,8 @@ class TINTagger(tk.Tk):
         ################################
         # Draw exon names in top frame #
         ################################
+
+        as_id = data["as_id"]
 
         # Keep track of row number
         row_number = 0
@@ -1714,45 +1791,60 @@ class TINTagger(tk.Tk):
                 canvas_background = COLOR_SAMPLE_HIGHLIGHT
 
             # Initialize canvas and grid to this row in the exon frame
+            # TODO: Dark / Monochrome colors if sample_data["is_reported"] is False
             row_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=canvas_height)
             row_canvas.grid(row=row_number, column=0, sticky="NEWS")
 
-            # TEST: Create button frame
-            # TODO: If this is tagged, highlight the corresponding button
-            style = ttk.Style()
-            style.configure(STYLE_BUTTON_INTERESTING, foreground=COLOR_DARKBLUE)
-            style.configure(STYLE_BUTTON_NOT_INTERESTING, foreground=COLOR_DARKBLUE)
-            style.configure(STYLE_BUTTON_UNCERTAIN, foreground=COLOR_DARKBLUE, font="tkDefaultFont 16 bold")
-            style.map(
-                STYLE_BUTTON_INTERESTING,
-                foreground=[("active", COLOR_INTERESTING)],
-            )
-            style.map(
-                STYLE_BUTTON_NOT_INTERESTING,
-                foreground=[("active", COLOR_NOT_INTERESTING)]
-            )
-            style.map(
-                STYLE_BUTTON_UNCERTAIN,
-                foreground=[("active", COLOR_UNCERTAIN)]
-            )
+            #########################
+            # Setup tagging buttons #
+            #########################
+            # TODO: Update button frame and button color depending on sample tag and algo-tag
+            sample_tag = sample_data["event_tag"]
+            # TEST: Algo tag
             test = random.randint(0, 2)
-            bg_color = COLOR_INTERESTING
+            algo_tag_color = COLOR_INTERESTING
             if test == 1:
-                bg_color = COLOR_NOT_INTERESTING
+                algo_tag_color = COLOR_NOT_INTERESTING
             if test == 0:
-                bg_color = COLOR_UNCERTAIN
-            button_frame = tk.Frame(self.exon_frame, bg=bg_color, padx=5, pady=0, borderwidth=0, relief=tk.SOLID)
+                algo_tag_color = COLOR_UNCERTAIN
+            # END TEST: Algo tag
+            button_frame = tk.Frame(self.exon_frame, bg=algo_tag_color, padx=5, pady=0, borderwidth=0, relief=tk.SOLID)
             button_frame.grid(row=row_number, column=1, sticky="NEWS")
-            up_button = ttk.Button(button_frame, text=u"\u25B2", style=STYLE_BUTTON_INTERESTING)
+            # Tag interesting button
+            up_button_style = STYLE_BUTTON_INTERESTING_ON if sample_tag == TAG_INTERESTING else STYLE_BUTTON_INTERESTING_OFF
+            up_button = ttk.Button(
+                button_frame,
+                text=u"\u25B2", style=up_button_style,
+            )
             up_button.grid(column=0, row=0, sticky="NEWS")
-            down_button = ttk.Button(button_frame, text=u"\u25BC", style=STYLE_BUTTON_NOT_INTERESTING)
+            # Tag not interesting button
+            down_button_style = STYLE_BUTTON_NOT_INTERESTING_ON if sample_tag == TAG_NOT_INTERESTING else STYLE_BUTTON_NOT_INTERESTING_OFF
+            down_button = ttk.Button(
+                button_frame,
+                text=u"\u25BC",
+                style=down_button_style,
+            )
             down_button.grid(column=0, row=1, sticky="NEWS")
-            uncertain_button = ttk.Button(button_frame, text="?", style=STYLE_BUTTON_UNCERTAIN)
+            # Tag uncertain button
+            uncertain_button_style = STYLE_BUTTON_UNCERTAIN_ON if sample_tag == TAG_UNCERTAIN else STYLE_BUTTON_UNCERTAIN_OFF
+            uncertain_button = ttk.Button(
+                button_frame,
+                text="?",
+                style=uncertain_button_style,
+            )
             uncertain_button.grid(column=0, row=2, sticky="NEWS")
+
+            # Set callback functions for all buttons
+            up_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_INTERESTING, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
+            down_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_NOT_INTERESTING, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
+            uncertain_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_UNCERTAIN, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
+
             button_frame.rowconfigure(0, weight=1)
             button_frame.rowconfigure(1, weight=1)
             button_frame.rowconfigure(2, weight=1)
             # END TEST
+
+            # TODO: Set button pressed colors according to sample tag
 
             # Keep track of canvases used
             self.canvases.append(row_canvas)
@@ -1839,11 +1931,9 @@ if __name__ == "__main__":
     app.wm_title("TIN-Tagger")
     screen_width = app.winfo_screenwidth()
     screen_height = app.winfo_screenheight()
-    print "Screen width / height: %d / %d" % (screen_width, screen_height)
     # Fill 80% of screen
     new_width = int((float(screen_width) / 100.00) * 80)
     new_height = int((float(screen_height) / 100.00) * 80)
-    print "New width / height: %d / %d" % (new_width, new_height)
     app.geometry("%dx%d" % (new_width, new_height))
     #app.withdraw()
     app.center_window(app)

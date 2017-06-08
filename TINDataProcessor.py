@@ -150,7 +150,7 @@ class TINDataProcessor(object):
             return gene_rpkm
         except IndexError:
             # Data not found for this sample/gene
-            return 0
+            return 0.0
 
     def get_coverage_by_coordinates(self, coordinates, bam_file_path, testing):
         """
@@ -188,6 +188,32 @@ class TINDataProcessor(object):
             bam_paths["sample%s" % str(x)] = os.path.join(bam_directory, "%s.sorted.bam" % str(x))
 
         return bam_paths
+
+    def get_tag_by_sample_name_and_as_id(self, sample_name, as_id, dataset):
+        """
+        Returns the tag for this as_id for the given sample.
+        """
+        try:
+            tag = dataset.loc[(dataset["as_id"] == as_id) & (dataset["name"] == sample_name)]["event_tag"].iloc[0]
+            print "Found tag:", tag
+            return tag
+        except IndexError as e:
+            print "ERROR, can't find tag for sample %s, as_id %d. Message:\n%s" % (sample_name, as_id, e.message)
+
+    def set_tag_by_sample_name_and_as_id(self, new_tag, sample_name, as_id, dataset):
+        """
+        Sets a given tag for this sample and this as_id
+        """
+
+        # Get index of the row in question
+        try:
+            row_index = dataset.loc[(dataset["as_id"] == as_id) & (dataset["name"] == sample_name)].index.tolist()[0]
+            # Assign new tag to this row
+            dataset.set_value(row_index, "event_tag", new_tag)
+            print "Set tag:", new_tag
+        except IndexError as e:
+            print "ERROR: Can't find row index for sample %s, as_id %d. Message:\n%s" % (sample_name, as_id, e.message)
+
 
 
 
