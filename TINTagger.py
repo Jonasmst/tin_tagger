@@ -49,10 +49,20 @@ COLOR_CANVAS_TEXT = COLOR_WHITE
 COLOR_CANVAS_TEXT_SHADOW = "black"
 COLOR_SAMPLE_HIGHLIGHT = COLOR_LIGHTRED
 
+COLOR_INTERESTING = COLOR_GREEN
+COLOR_NOT_INTERESTING = COLOR_RED
+COLOR_UNCERTAIN = COLOR_PURPLE
+COLOR_NO_TAG = COLOR_DARKGRAY
+
 TAG_INTERESTING = 0
 TAG_NOT_INTERESTING = 1
 TAG_UNCERTAIN = 2
 TAG_NO_TAG = -1
+
+STYLE_BUTTON_INTERESTING = "Interesting.TButton"
+STYLE_BUTTON_NOT_INTERESTING = "Not_interesting.TButton"
+STYLE_BUTTON_UNCERTAIN = "Uncertain.TButton"
+
 
 def natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
     """ Provides natural sort as a key to sorted() """
@@ -121,7 +131,7 @@ class TINTagger(tk.Tk):
 
         if self.testing:
             # Mac ghetto-fix for bringing GUI to front when running.
-            #os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
+            os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
             pass
 
         #####################
@@ -389,15 +399,15 @@ class TINTagger(tk.Tk):
         tags_frame = ttk.Frame(statusbar, padding=tags_padding)
         tags_frame.grid(column=2, row=0, sticky="E")
         # Interesting count
-        self.statusbar_text_interesting = ttk.Label(tags_frame, padding=tags_padding, text="0", font="TkDefaultFont", foreground=COLOR_GREEN)
+        self.statusbar_text_interesting = ttk.Label(tags_frame, padding=tags_padding, text="0", font="TkDefaultFont", foreground=COLOR_INTERESTING)
         self.statusbar_text_interesting.grid(column=0, row=0, sticky="NEWS")
         self.statusbar_text_interesting.bind("<Motion>", lambda event=None: self.set_statusbar_text("Tagged interesting: %s" % self.statusbar_text_interesting["text"]))
         # Not interesting count
-        self.statusbar_text_not_interesting = ttk.Label(tags_frame, padding=tags_padding, text="0", font="TkDefaultFont", foreground=COLOR_RED)
+        self.statusbar_text_not_interesting = ttk.Label(tags_frame, padding=tags_padding, text="0", font="TkDefaultFont", foreground=COLOR_NOT_INTERESTING)
         self.statusbar_text_not_interesting.grid(column=1, row=0, sticky="NEWS")
         self.statusbar_text_not_interesting.bind("<Enter>", lambda event=None: self.set_statusbar_text("Tagged not interesting: %s" % self.statusbar_text_not_interesting["text"]))
         # Uncertain
-        self.statusbar_text_uncertain = ttk.Label(tags_frame, padding=tags_padding, text="0", font="tkDefaultFont", foreground=COLOR_ORANGE)
+        self.statusbar_text_uncertain = ttk.Label(tags_frame, padding=tags_padding, text="0", font="tkDefaultFont", foreground=COLOR_UNCERTAIN)
         self.statusbar_text_uncertain.grid(column=2, row=0, sticky="NEWS")
         self.statusbar_text_uncertain.bind("<Enter>", lambda event=None: self.set_statusbar_text("Tagged uncertain: %s" % self.statusbar_text_uncertain["text"]))
 
@@ -1064,6 +1074,8 @@ class TINTagger(tk.Tk):
                     sample_name:
                     {
                         "gene_rpkm": float,
+                        "event_tag": int,
+                        "is_reported": bool,
                         "exons":
                         {
                             exon_name:
@@ -1119,40 +1131,6 @@ class TINTagger(tk.Tk):
         # Create coordinates from chr, start and stop
         coordinates = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
 
-        """
-        # Find coverage for all exons in every sample
-        exon_coverages = {}
-        for s_name in sample_names:
-            # First find for exon in question
-            coverage = self.get_coverage_by_coordinates(s_name, coordinates)
-            # included_counts, excluded_counts = self.get_included_and_excluded_counts
-            if exons not in exon_coverages.keys():
-                exon_coverages[exons] = {}
-            exon_coverages[exons][s_name] = coverage
-
-            # Then previous exon (if applicable)
-            if not pd.isnull(prev_exon_name):
-                if pd.isnull(prev_exon_start) or pd.isnull(prev_exon_stop):
-                    print "Error: prev_exon_name is fine, but there's no prev_exon_start or prev_exon_stop"
-                # Find coords
-                prev_coords = str(chrom) + ":" + str(int(prev_exon_start)) + "-" + str(int(prev_exon_stop))
-                prev_coverage = self.get_coverage_by_coordinates(s_name, prev_coords)
-                if prev_exon_name not in exon_coverages.keys():
-                    exon_coverages[prev_exon_name] = {}
-                exon_coverages[prev_exon_name][s_name] = prev_coverage
-
-            # Lastly, the next exon (if applicable)
-            if not pd.isnull(next_exon_name):
-                if pd.isnull(next_exon_start) or pd.isnull(next_exon_stop):
-                    print "Error: next_exon_name is fine, but there's no next_exon_start or next_exon_stop"
-                # Find coords
-                next_coords = str(chrom) + ":" + str(int(next_exon_start)) + "-" + str(int(next_exon_stop))
-                next_coverage = self.get_coverage_by_coordinates(s_name, next_coords)
-                if next_exon_name not in exon_coverages.keys():
-                    exon_coverages[next_exon_name] = {}
-                exon_coverages[next_exon_name][s_name] = next_coverage
-        """
-
         # General row data
         row_data = {
             "splice_type": splice_type,
@@ -1167,36 +1145,56 @@ class TINTagger(tk.Tk):
             "excluded_counts": excluded_counts,
         }
 
+        # Keep track of exon coverages and gene RPKMs
         all_gene_rpkms = []
-
-        # Sample-specific data
-        # Keep track of exon coverages
         upstream_exon_coverages = [-1]
         downstream_exon_coverages = [-1]
         exon_of_interest_coverages = [-1]
 
+        ########################
+        # Sample-specific data #
+        ########################
         samples_data = {}
         for s_name in sample_names:
+            # Add entry for sample in the container
             if s_name not in samples_data.keys():
                 samples_data[s_name] = {}
-            gene_rpkm = self.get_gene_rpkm_by_sample_name(s_name, gene_symbol)
+
+            # Find if sample is reported by SpliceSeq or not
+            is_reported = self.data_processor.is_event_reported_in_sample(sample_name, as_id, self.dataset)
+            samples_data["is_reported"] = is_reported
+            # Default to sample not being tagged
+            sample_tag = TAG_NO_TAG
+            # Default to RPKM being 0 (in case it's not reported)
+            gene_rpkm = 0
+
+            if is_reported:
+                gene_rpkm = self.data_processor.get_gene_rpkm_by_sample_name(s_name, gene_symbol, self.dataset)
+                sample_tag = self.data_processor.get_sample_tag_by_as_id(s_name, as_id, self.dataset)
+
             samples_data[s_name]["gene_rpkm"] = gene_rpkm
             all_gene_rpkms.append(gene_rpkm)
+            samples_data[s_name]["event_tag"] = sample_tag
 
-            # TEST: New exon structure
+            #########################
+            # Find exon information #
+            #########################
             sample_exons = {}
+            # TODO: Also handle AT and AP events
             if splice_type in ["ES", "ME", "AD", "AA", "RI"]:
                 # Handle upstream exon
+                upstream_exon_coords = str(chrom) + ":" + str(int(prev_exon_start)) + "-" + str(int(prev_exon_stop))
                 upstream_exon = {
                     "exon_name": prev_exon_name,
-                    "coverage": self.get_coverage_by_coordinates(s_name, str(chrom) + ":" + str(int(prev_exon_start)) + "-" + str(int(prev_exon_stop)))
+                    "coverage": self.data_processor.get_coverage_by_coordinates(upstream_exon_coords, self.bam_paths[s_name], self.testing)
                 }
                 sample_exons["upstream_exon"] = upstream_exon
 
                 # Handle downstream exon
+                downstream_exon_coords = str(chrom) + ":" + str(int(next_exon_start)) + "-" + str(int(next_exon_stop))
                 downstream_exon = {
                     "exon_name": next_exon_name,
-                    "coverage": self.get_coverage_by_coordinates(s_name, str(chr))
+                    "coverage": self.data_processor.get_coverage_by_coordinates(downstream_exon_coords, self.bam_paths[s_name], self.testing)
                 }
                 sample_exons["downstream_exon"] = downstream_exon
 
@@ -1205,9 +1203,10 @@ class TINTagger(tk.Tk):
                 downstream_exon_coverages.append(downstream_exon["coverage"])
 
             # Handle the main exon
+            main_exon_coords = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
             exon_of_interest = {
                 "exon_name": exons,
-                "coverage": self.get_coverage_by_coordinates(s_name, str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))),
+                "coverage": self.data_processor.get_coverage_by_coordinates(main_exon_coords, self.bam_paths[s_name], self.testing),
                 "psi": psi,
                 "included_counts": included_counts,
                 "excluded_counts": excluded_counts
@@ -1219,24 +1218,6 @@ class TINTagger(tk.Tk):
 
             # Add exons data to this sample
             samples_data[s_name]["exons"] = sample_exons
-            # END TEST
-
-            """
-            # Find exons in this sample
-            sample_exons = {}
-            for e_name in exon_coverages.keys():
-                if e_name not in sample_exons.keys():
-                    sample_exons[e_name] = {}
-                sample_exons[e_name]["coverage"] = exon_coverages[e_name][s_name]
-                if s_name == sample_name and e_name == exons:
-                    sample_exons[e_name]["psi"] = psi
-                else:
-                    sample_exons[e_name]["psi"] = -1.0
-                sample_exons[e_name]["max_coverage"] = max(exon_coverages[e_name].values())
-
-            # Add exon data to sample
-            samples_data[s_name]["exons"] = sample_exons
-            """
 
         row_data["samples"] = samples_data
         row_data["max_gene_rpkm"] = max(all_gene_rpkms)
@@ -1248,42 +1229,6 @@ class TINTagger(tk.Tk):
         self.config(cursor="")
 
         return row_data
-
-    def get_coverage_by_coordinates(self, sample_name, coordinates):
-        """
-        Runs samtools depth on a BAM-file to find the average number of reads
-        covering a region. Returns the average coverage.
-        """
-
-        if self.testing:
-            return random.randint(100, 2000)
-        else:
-            path_to_bam = self.bam_paths[sample_name]
-            command = "samtools depth -r %s %s | awk '{sum+=$3;cnt++;}END{if (cnt>0){ print sum/cnt } else print 0}'" % (coordinates, path_to_bam)
-            # TODO: Something about security issue with shell=True, but it allows piping in awk commands, so I'll keep it for now
-            samtools_output = subprocess.check_output(command, shell=True)
-
-            region_coverage = -1.0
-            try:
-                region_coverage = float(samtools_output)
-            except ValueError:
-                print "ERROR: Samtools output can't be converted to float:"
-                print samtools_output
-
-            return region_coverage
-
-    def get_gene_rpkm_by_sample_name(self, sample_name, gene_symbol):
-        """
-        Returns the RPKM of a gene for a given sample
-        """
-
-        if self.testing:
-            return random.randint(200, 2000)
-
-        try:
-            return self.dataset.loc[(self.dataset["symbol"] == gene_symbol) & (self.dataset["name"] == sample_name)]["rpkm"].iloc[0]
-        except IndexError:
-            return -1.0
 
     def save_file(self):
         print "Bleep, blop, saving file."
@@ -1772,34 +1717,38 @@ class TINTagger(tk.Tk):
             # TEST: Create button frame
             # TODO: If this is tagged, highlight the corresponding button
             style = ttk.Style()
-            style.configure("Green.TButton", foreground=COLOR_DARKBLUE)
-            style.configure("Red.TButton", foreground=COLOR_DARKBLUE)
-            style.configure("Orange.TButton", foreground=COLOR_DARKBLUE)
+            style.configure(STYLE_BUTTON_INTERESTING, foreground=COLOR_DARKBLUE)
+            style.configure(STYLE_BUTTON_NOT_INTERESTING, foreground=COLOR_DARKBLUE)
+            style.configure(STYLE_BUTTON_UNCERTAIN, foreground=COLOR_DARKBLUE, font="tkDefaultFont 16 bold")
             style.map(
-                "Green.TButton",
-                foreground=[("active", COLOR_GREEN)],
+                STYLE_BUTTON_INTERESTING,
+                foreground=[("active", COLOR_INTERESTING)],
             )
             style.map(
-                "Red.TButton",
-                foreground=[("active", COLOR_RED)]
+                STYLE_BUTTON_NOT_INTERESTING,
+                foreground=[("active", COLOR_NOT_INTERESTING)]
             )
             style.map(
-                "Orange.TButton",
-                foreground=[("active", COLOR_ORANGE)]
+                STYLE_BUTTON_UNCERTAIN,
+                foreground=[("active", COLOR_UNCERTAIN)]
             )
-            button_frame = ttk.Frame(self.exon_frame)
+            test = random.randint(0, 2)
+            bg_color = COLOR_INTERESTING
+            if test == 1:
+                bg_color = COLOR_NOT_INTERESTING
+            if test == 0:
+                bg_color = COLOR_UNCERTAIN
+            button_frame = tk.Frame(self.exon_frame, bg=bg_color, padx=5, pady=0, borderwidth=0, relief=tk.SOLID)
             button_frame.grid(row=row_number, column=1, sticky="NEWS")
-            up_button = ttk.Button(button_frame, text=u"\u25B2", style="Green.TButton")
+            up_button = ttk.Button(button_frame, text=u"\u25B2", style=STYLE_BUTTON_INTERESTING)
             up_button.grid(column=0, row=0, sticky="NEWS")
-            down_button = ttk.Button(button_frame, text=u"\u25BC", style="Red.TButton")
+            down_button = ttk.Button(button_frame, text=u"\u25BC", style=STYLE_BUTTON_NOT_INTERESTING)
             down_button.grid(column=0, row=1, sticky="NEWS")
-            uncertain_button = ttk.Button(button_frame, text="?", style="Orange.TButton")
+            uncertain_button = ttk.Button(button_frame, text="?", style=STYLE_BUTTON_UNCERTAIN)
             uncertain_button.grid(column=0, row=2, sticky="NEWS")
             button_frame.rowconfigure(0, weight=1)
             button_frame.rowconfigure(1, weight=1)
             button_frame.rowconfigure(2, weight=1)
-
-            self.exon_frame.columnconfigure(0, weight=1)
             # END TEST
 
             # Keep track of canvases used
@@ -1885,7 +1834,19 @@ if __name__ == "__main__":
     # Create and run app
     app = TINTagger()
     app.wm_title("TIN-Tagger")
-    app.geometry("1024x576")
+    screen_width = app.winfo_screenwidth()
+    screen_height = app.winfo_screenheight()
+    print "Screen width / height: %d / %d" % (screen_width, screen_height)
+    # Fill 80% of screen
+    new_width = int((float(screen_width) / 100.00) * 80)
+    new_height = int((float(screen_height) / 100.00) * 80)
+    print "New width / height: %d / %d" % (new_width, new_height)
+    app.geometry("%dx%d" % (new_width, new_height))
+    #app.withdraw()
+    app.center_window(app)
+    #app.update()
+    #app.deiconify()
+    #app.geometry("1024x576")
 
     app.mainloop()
 

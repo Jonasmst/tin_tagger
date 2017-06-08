@@ -2,6 +2,7 @@ import subprocess
 import pandas as pd
 import os
 import json
+import random
 
 
 class TINDataProcessor(object):
@@ -57,6 +58,8 @@ class TINDataProcessor(object):
 
         # TODO: Don't do this; return full dataset
         df = df.loc[df.splice_type == "ES"]
+
+        # TODO: Count occurrences if not already done
 
         return df
 
@@ -120,6 +123,60 @@ class TINDataProcessor(object):
         except IOError as e:
             print "Error when reading filters from file: %s", e.message
             return None
+
+    def is_event_reported_in_sample(self, sample_name, as_id, dataset):
+        """
+        Returns True if an event is reported for a given sample, otherwise returns False
+        """
+        event_sample_names = list(dataset.loc[dataset["as_id"] == as_id]["name"])
+        return sample_name in event_sample_names
+
+    def get_sample_tag_by_as_id(self, sample_name, as_id, dataset):
+        """
+        Returns the event tag for a given sample and as_id
+        """
+        row = dataset.loc[(dataset["as_id"] == as_id) & (dataset["name"] == sample_name)]
+        sample_tag = row["event_tag"].iloc[0]
+        return sample_tag
+
+    def get_gene_rpkm_by_sample_name(self, sample_name, gene_symbol, dataset):
+        """
+        Returns the gene RPKM value for a given gene in a given sample.
+        """
+        try:
+            gene_rpkm = dataset.loc[(dataset["symbol"] == gene_symbol) & (dataset["name"] == sample_name)].iloc[0]
+            return gene_rpkm
+        except IndexError:
+            # Data not found for this sample/gene
+            return 0
+
+    def get_coverage_by_coordinates(self, coordinates, bam_file_path, testing):
+        """
+        Runs samtools depth -r on a BAM-file to find the average number of reads covering a region. Returns the
+        average coverage. The param 'testing' indicates whether or not the program is run for testing purposes
+        (e.g. outside of the TSD firewall where BAM-files are not available) or not. For usual operation, 'testing' is
+        false.
+        """
+        if testing:
+            return random.randint(100, 2000)
+        else:
+            bam_file_path
+            command = "samtools depth -r %s %s | awk '{sum+=$3;cnt++;}END{if (cnt>0){ print sum/cnt } else print 0}'" % (coordinates, bam_file_path)
+            samtools_output = subprocess.check_output(command, shell=True)
+
+            region_coverage = -1.0
+            try:
+                region_coverage = float(samtools_output)
+            except ValueError:
+                print "ERROR: Samtools output can't be converted to float:"
+                print samtools_output
+
+            return region_coverage
+
+
+
+
+
 
 
 
