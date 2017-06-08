@@ -14,7 +14,6 @@ from TINDataProcessor import TINDataProcessor
 # TODO: Cache rows so we don't need to run samtools etc when pressing previous-button
 # TODO: Find PSI, included counts, excluded counts for other exons and display if it's available (gonna be an sql-call).
 # TODO: Add UI for tagging-buttons as separate function, so I don't have to write it for every splicing event type.
-# TODO: Add separators between sample rows
 
 """
 ################################################
@@ -1137,7 +1136,6 @@ class TINTagger(tk.Tk):
                 }
         }
         """
-        # TODO: Sanitize everything
         # TODO: Find included_counts and excluded_counts for other exons than the one in question
 
         # Set waiting cursor
@@ -1719,6 +1717,66 @@ class TINTagger(tk.Tk):
             elif new_tag == TAG_UNCERTAIN:
                 uncertain_button.configure(style=STYLE_BUTTON_UNCERTAIN_ON)
 
+    def add_tagging_buttons(self, row_number, sample_name, is_reported, sample_tag, as_id):
+        """
+        Add buttons
+        """
+        #########################
+        # Setup tagging buttons #
+        #########################
+        # TEST: Algo tag
+        test = random.randint(0, 2)
+        algo_tag_color = COLOR_INTERESTING
+        if test == 1:
+            algo_tag_color = COLOR_NOT_INTERESTING
+        if test == 0:
+            algo_tag_color = COLOR_UNCERTAIN
+
+        if not is_reported:
+            algo_tag_color = COLOR_DARKWHITE
+        # END TEST: Algo tag
+        button_frame = tk.Frame(self.exon_frame, bg=algo_tag_color, padx=2, pady=0, borderwidth=0, relief=tk.SOLID)
+        button_frame.grid(row=row_number, column=1, sticky="NEWS")
+        # Tag interesting button
+        up_button_style = STYLE_BUTTON_INTERESTING_ON if sample_tag == TAG_INTERESTING else STYLE_BUTTON_INTERESTING_OFF
+        up_button = ttk.Button(
+            button_frame,
+            text=u"\u25B2", style=up_button_style,
+        )
+        up_button.grid(column=0, row=0, sticky="NEWS")
+        # Tag not interesting button
+        down_button_style = STYLE_BUTTON_NOT_INTERESTING_ON if sample_tag == TAG_NOT_INTERESTING else STYLE_BUTTON_NOT_INTERESTING_OFF
+        down_button = ttk.Button(
+            button_frame,
+            text=u"\u25BC",
+            style=down_button_style,
+        )
+        down_button.grid(column=0, row=1, sticky="NEWS")
+        # Tag uncertain button
+        uncertain_button_style = STYLE_BUTTON_UNCERTAIN_ON if sample_tag == TAG_UNCERTAIN else STYLE_BUTTON_UNCERTAIN_OFF
+        uncertain_button = ttk.Button(
+            button_frame,
+            text="?",
+            style=uncertain_button_style,
+        )
+        uncertain_button.grid(column=0, row=2, sticky="NEWS")
+
+        # Set callback functions for all buttons
+        up_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_INTERESTING, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
+        down_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_NOT_INTERESTING, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
+        uncertain_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_UNCERTAIN, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
+
+        # Disable buttons if the event is not reported for this sample
+        if not is_reported:
+            up_button.state(["disabled"])
+            down_button.state(["disabled"])
+            uncertain_button.state(["disabled"])
+
+        button_frame.rowconfigure(0, weight=1)
+        button_frame.rowconfigure(1, weight=1)
+        button_frame.rowconfigure(2, weight=1)
+        # END tagging buttons
+
     def exon_skipping_new(self, data):
         """
         Draw exon skipping events
@@ -1790,8 +1848,9 @@ class TINTagger(tk.Tk):
         for sample_name in sorted(data["samples"].keys(), key=natural_sort_key):
             sample_data = data["samples"][sample_name]
 
-            # Check if the event is reported for this sample
+            # Sample-specific variables
             is_reported = sample_data["is_reported"]
+            sample_tag = sample_data["event_tag"]
 
             # Get sample exons
             upstream_exon = sample_data["exons"]["upstream_exon"]
@@ -1819,72 +1878,18 @@ class TINTagger(tk.Tk):
             # Keep track of canvases used
             self.canvases.append(row_canvas)
 
-            #########################
             # Setup tagging buttons #
-            #########################
-            sample_tag = sample_data["event_tag"]
-            # TEST: Algo tag
-            test = random.randint(0, 2)
-            algo_tag_color = COLOR_INTERESTING
-            if test == 1:
-                algo_tag_color = COLOR_NOT_INTERESTING
-            if test == 0:
-                algo_tag_color = COLOR_UNCERTAIN
-
-            if not is_reported:
-                algo_tag_color = COLOR_DARKWHITE
-            # END TEST: Algo tag
-            button_frame = tk.Frame(self.exon_frame, bg=algo_tag_color, padx=2, pady=0, borderwidth=0, relief=tk.SOLID)
-            button_frame.grid(row=row_number, column=1, sticky="NEWS")
-            # Tag interesting button
-            up_button_style = STYLE_BUTTON_INTERESTING_ON if sample_tag == TAG_INTERESTING else STYLE_BUTTON_INTERESTING_OFF
-            up_button = ttk.Button(
-                button_frame,
-                text=u"\u25B2", style=up_button_style,
-            )
-            up_button.grid(column=0, row=0, sticky="NEWS")
-            # Tag not interesting button
-            down_button_style = STYLE_BUTTON_NOT_INTERESTING_ON if sample_tag == TAG_NOT_INTERESTING else STYLE_BUTTON_NOT_INTERESTING_OFF
-            down_button = ttk.Button(
-                button_frame,
-                text=u"\u25BC",
-                style=down_button_style,
-            )
-            down_button.grid(column=0, row=1, sticky="NEWS")
-            # Tag uncertain button
-            uncertain_button_style = STYLE_BUTTON_UNCERTAIN_ON if sample_tag == TAG_UNCERTAIN else STYLE_BUTTON_UNCERTAIN_OFF
-            uncertain_button = ttk.Button(
-                button_frame,
-                text="?",
-                style=uncertain_button_style,
-            )
-            uncertain_button.grid(column=0, row=2, sticky="NEWS")
-
-            # Set callback functions for all buttons
-            up_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_INTERESTING, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
-            down_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_NOT_INTERESTING, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
-            uncertain_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_UNCERTAIN, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
-
-            # Disable buttons if the event is not reported for this sample
-            if not is_reported:
-                up_button.state(["disabled"])
-                down_button.state(["disabled"])
-                uncertain_button.state(["disabled"])
-
-            button_frame.rowconfigure(0, weight=1)
-            button_frame.rowconfigure(1, weight=1)
-            button_frame.rowconfigure(2, weight=1)
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
 
             # Set even weight for every row in the exon frame
             self.exon_frame.rowconfigure(row_number, weight=1)
 
-            # TEST: Add separator
+            # Add separator
             row_number += 1
             sep = tk.Frame(self.exon_frame, bg=COLOR_DARKWHITE, height=2)
             sep.grid(row=row_number, column=0, sticky="NEWS")
             button_sep = tk.Frame(self.exon_frame, bg=COLOR_DARKWHITE, height=2)
             button_sep.grid(row=row_number, column=1, sticky="NEWS")
-            # END TEST
 
             ######################
             # Draw upstream exon #

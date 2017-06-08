@@ -199,7 +199,7 @@ class TINDataProcessor(object):
         """
         try:
             tag = dataset.loc[(dataset["as_id"] == as_id) & (dataset["name"] == sample_name)]["event_tag"].iloc[0]
-            print "Found tag:", tag
+            #print "Found tag:", tag
             return tag
         except IndexError as e:
             print "ERROR, can't find tag for sample %s, as_id %d. Message:\n%s" % (sample_name, as_id, e.message)
@@ -214,7 +214,7 @@ class TINDataProcessor(object):
             row_index = dataset.loc[(dataset["as_id"] == as_id) & (dataset["name"] == sample_name)].index.tolist()[0]
             # Assign new tag to this row
             dataset.set_value(row_index, "event_tag", new_tag)
-            print "Set tag:", new_tag
+            #print "Set tag:", new_tag
         except IndexError as e:
             print "ERROR: Can't find row index for sample %s, as_id %d. Message:\n%s" % (sample_name, as_id, e.message)
 
