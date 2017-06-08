@@ -13,7 +13,6 @@ from TINDataProcessor import TINDataProcessor
 
 # TODO: Cache rows so we don't need to run samtools etc when pressing previous-button
 # TODO: Find PSI, included counts, excluded counts for other exons and display if it's available (gonna be an sql-call).
-# TODO: Add UI for tagging-buttons as separate function, so I don't have to write it for every splicing event type.
 
 """
 ################################################
@@ -1716,6 +1715,9 @@ class TINTagger(tk.Tk):
                 down_button.configure(style=STYLE_BUTTON_NOT_INTERESTING_ON)
             elif new_tag == TAG_UNCERTAIN:
                 uncertain_button.configure(style=STYLE_BUTTON_UNCERTAIN_ON)
+
+        # Finally, update tag information in status-bar
+        self.update_tag_information()
 
     def add_tagging_buttons(self, row_number, sample_name, is_reported, sample_tag, as_id):
         """
