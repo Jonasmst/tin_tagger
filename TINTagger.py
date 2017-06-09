@@ -17,7 +17,8 @@ from TINDataProcessor import TINDataProcessor
 # TODO: Draw stepped coverage-indicator (as in IGV) for every region reported by samtools and not only display the average (can draw over the exons, e.g.)
 # TODO: Since we're now displaying and tagging all samples, a per-row approach doesn't make sense anymore. Should be based on as_id so we don't display duplicates that have already been tagged.
 # TODO: Instead of highlighting the sample canvas, we should highlight the exon column (not the unreported ones, though).
-# TODO: Normalize counts for sequencing depth (can I use the RPKM? No! The gene may not be expressed, which has nothing to do with seq. depth)
+# TODO: Normalize counts for sequencing depth (can I use the RPKM? No! The gene may not be expressed, which has nothing to do with seq. depth): SpliceSeqDB has sample.alignedReads that I can use.
+
 
 """
 ################################################

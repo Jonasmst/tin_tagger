@@ -323,10 +323,9 @@ class TINDataProcessor(object):
             # Default to sample not being tagged
             sample_tag = self.tag_no_tag
             # Default to RPKM being 0 (in case it's not reported)
-            gene_rpkm = 0
+            gene_rpkm = self.get_gene_rpkm_by_sample_name(s_name, gene_symbol, dataset)
 
             if is_reported:
-                gene_rpkm = self.get_gene_rpkm_by_sample_name(s_name, gene_symbol, dataset)
                 sample_tag = self.get_sample_tag_by_as_id(s_name, as_id, dataset)
 
             samples_data[s_name]["gene_rpkm"] = gene_rpkm
