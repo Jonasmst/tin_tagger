@@ -7,8 +7,8 @@ import random
 
 class TINDataProcessor(object):
 
-    def __init__(self):
-        pass
+    def __init__(self, tag_no_tag):
+        self.tag_no_tag = tag_no_tag
 
     def load_dataset(self, filepath):
         """
@@ -218,6 +218,171 @@ class TINDataProcessor(object):
         except IndexError as e:
             print "ERROR: Can't find row index for sample %s, as_id %d. Message:\n%s" % (sample_name, as_id, e.message)
 
+    def get_row_data(self, current_row_index, dataset, sample_names, bam_paths, testing):
+        """
+        Returns formatted data for the current row index.
+        The format is as follows:
+
+        {
+            "splice_type": splice_type,
+            "gene_symbol": gene_symbol,
+            "sample_of_interest": sample_name,
+            "location": coordinates,
+            "exons": exons,
+            "strand": strand,
+            "as_id": as_id,
+            "exon_psi": str(psi),
+            "max_gene_rpkm": float,
+            "samples":
+                {
+                    sample_name:
+                    {
+                        "gene_rpkm": float,
+                        "event_tag": int,
+                        "is_reported": bool,
+                        "exons":
+                        {
+                            exon_name:
+                            {
+                                "coverage": int,
+                                "max_coverage": int,
+                                "psi": float
+                            }
+                        }
+                    }
+                }
+        }
+        """
+        # TODO: Find included_counts and excluded_counts for other exons than the one in question
+
+        # Get information
+        splice_type = dataset.iloc[current_row_index]["splice_type"]
+        sample_name = dataset.iloc[current_row_index]["name"]
+        as_id = dataset.iloc[current_row_index]["as_id"]
+        psi = dataset.iloc[current_row_index]["psi"]
+        gene_symbol = dataset.iloc[current_row_index]["symbol"]
+        strand = dataset.iloc[current_row_index]["strand"]
+        exons = dataset.iloc[current_row_index]["exons"]
+        chrom = dataset.iloc[current_row_index]["chr"]
+        splice_start = dataset.iloc[current_row_index]["first_exon_start"]
+        splice_stop = dataset.iloc[current_row_index]["last_exon_stop"]
+        prev_exon_start = dataset.iloc[current_row_index]["prev_exon_start"]  # NaN for AT/AP
+        prev_exon_stop = dataset.iloc[current_row_index]["prev_exon_stop"]  # NaN for AT/AP
+        next_exon_start = dataset.iloc[current_row_index]["next_exon_start"]  # NaN for AT/AP
+        next_exon_stop = dataset.iloc[current_row_index]["next_exon_stop"]  # NaN for AT/AP
+        # Handle negative strand start- and stop- coordinates
+        if strand == "-":
+            splice_start = dataset.iloc[current_row_index]["last_exon_stop"]  # NaN for AT/AP
+            splice_stop = dataset.iloc[current_row_index]["first_exon_start"]  # NaN for AT/AP
+            prev_exon_start = dataset.iloc[current_row_index]["prev_exon_stop"]  # NaN for AT/AP
+            prev_exon_stop = dataset.iloc[current_row_index]["prev_exon_start"]  # NaN for AT/AP
+            next_exon_start = dataset.iloc[current_row_index]["next_exon_stop"]  # NaN for AT/AP
+            next_exon_stop = dataset.iloc[current_row_index]["next_exon_start"]  # NaN for AT/AP
+        included_counts = dataset.iloc[current_row_index]["included_counts"]
+        excluded_counts = dataset.iloc[current_row_index]["excluded_counts"]
+        prev_exon_name = dataset.iloc[current_row_index]["exon1"]  # NaN for AT/AP
+        next_exon_name = dataset.iloc[current_row_index]["exon2"]  # NaN for AT/AP
+        # prev_exon_id = dataset.iloc[current_row_index]["start_ex"]  # NaN for AT/AP
+        # next_exon_id = dataset.iloc[current_row_index]["end_ex"]  # NaN for AT/AP
+
+        # Create coordinates from chr, start and stop
+        coordinates = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
+
+        # General row data
+        row_data = {
+            "splice_type": splice_type,
+            "gene_symbol": gene_symbol,
+            "sample_of_interest": sample_name,
+            "location": coordinates,
+            "exons": exons,
+            "strand": strand,
+            "as_id": as_id,
+            "exon_psi": psi,
+            "included_counts": included_counts,
+            "excluded_counts": excluded_counts,
+        }
+
+        # Keep track of exon coverages and gene RPKMs
+        all_gene_rpkms = []
+        upstream_exon_coverages = [-1]
+        downstream_exon_coverages = [-1]
+        exon_of_interest_coverages = [-1]
+
+        ########################
+        # Sample-specific data #
+        ########################
+        samples_data = {}
+        for s_name in sample_names:
+            # Add entry for sample in the container
+            if s_name not in samples_data.keys():
+                samples_data[s_name] = {}
+
+            # Find if sample is reported by SpliceSeq or not
+            is_reported = self.is_event_reported_in_sample(s_name, as_id, dataset)
+            samples_data[s_name]["is_reported"] = is_reported
+            # Default to sample not being tagged
+            sample_tag = self.tag_no_tag
+            # Default to RPKM being 0 (in case it's not reported)
+            gene_rpkm = 0
+
+            if is_reported:
+                gene_rpkm = self.get_gene_rpkm_by_sample_name(s_name, gene_symbol, dataset)
+                sample_tag = self.get_sample_tag_by_as_id(s_name, as_id, dataset)
+
+            samples_data[s_name]["gene_rpkm"] = gene_rpkm
+            all_gene_rpkms.append(gene_rpkm)
+            samples_data[s_name]["event_tag"] = sample_tag
+
+            #########################
+            # Find exon information #
+            #########################
+            sample_exons = {}
+            # TODO: Also handle AT and AP events
+            if splice_type in ["ES", "ME", "AD", "AA", "RI"]:
+                # Handle upstream exon
+                upstream_exon_coords = str(chrom) + ":" + str(int(prev_exon_start)) + "-" + str(int(prev_exon_stop))
+                upstream_exon = {
+                    "exon_name": prev_exon_name,
+                    "coverage": self.get_coverage_by_coordinates(upstream_exon_coords, bam_paths[s_name], testing)
+                }
+                sample_exons["upstream_exon"] = upstream_exon
+
+                # Handle downstream exon
+                downstream_exon_coords = str(chrom) + ":" + str(int(next_exon_start)) + "-" + str(int(next_exon_stop))
+                downstream_exon = {
+                    "exon_name": next_exon_name,
+                    "coverage": self.get_coverage_by_coordinates(downstream_exon_coords, bam_paths[s_name], testing)
+                }
+                sample_exons["downstream_exon"] = downstream_exon
+
+                # Keep track of coverage values
+                upstream_exon_coverages.append(upstream_exon["coverage"])
+                downstream_exon_coverages.append(downstream_exon["coverage"])
+
+            # Handle the main exon
+            main_exon_coords = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
+            exon_of_interest = {
+                "exon_name": exons,
+                "coverage": self.get_coverage_by_coordinates(main_exon_coords, bam_paths[s_name], testing),
+                "psi": psi,
+                "included_counts": included_counts,
+                "excluded_counts": excluded_counts
+            }
+            sample_exons["exon_of_interest"] = exon_of_interest
+
+            # Keep track of exon coverage values
+            exon_of_interest_coverages.append(exon_of_interest["coverage"])
+
+            # Add exons data to this sample
+            samples_data[s_name]["exons"] = sample_exons
+
+        row_data["samples"] = samples_data
+        row_data["max_gene_rpkm"] = max(all_gene_rpkms)
+        row_data["max_upstream_exon_coverage"] = max(upstream_exon_coverages)
+        row_data["max_downstream_exon_coverage"] = max(downstream_exon_coverages)
+        row_data["max_exon_of_interest_coverage"] = max(exon_of_interest_coverages)
+
+        return row_data
 
 
 

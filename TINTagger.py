@@ -144,10 +144,13 @@ class TINTagger(tk.Tk):
         self.canvases = []
 
         # A processor to handle I/O and system calls
-        self.data_processor = TINDataProcessor()
+        self.data_processor = TINDataProcessor(TAG_NO_TAG)
 
         # No dataset loaded by default
         self.dataset = None
+
+        # Names of all samples in the dataset
+        self.sample_names = []
 
         # Start on row 0 by default
         self.current_row_index = 0
@@ -989,11 +992,15 @@ class TINTagger(tk.Tk):
         """
         Calls the data processor to read file by path.
         """
+        # TODO: Handle empty dataset / non-compliant data formats
         # Feedback: Show busy cursor while dataset is loaded
         self.config(cursor="wait")
 
         # Get dataset
         self.dataset = self.data_processor.load_dataset(filepath)
+
+        # Find and store unique sample names
+        self.sample_names = list(self.dataset["name"].unique())
 
         # Default to the first line of the file
         self.current_row_index = 0
@@ -1010,6 +1017,9 @@ class TINTagger(tk.Tk):
             - Collects row data
             - Orchestrates UI update
         """
+
+        # Set waiting cursor
+        self.config(cursor="wait")
 
         # If no dataset is loaded, prompt user to load one
         try:
@@ -1032,6 +1042,8 @@ class TINTagger(tk.Tk):
             if self.testing:
                 self.read_dataset("/Users/jonas/Dropbox/phd/code/tin_tagger/datasets/mikes_query_with_tags.tsv")
 
+            # Reset cursor
+            self.config(cursor="")
             return
 
         # Make sure the dataset is not empty
@@ -1043,6 +1055,8 @@ class TINTagger(tk.Tk):
             # Update statusbar text
             self.set_statusbar_text("Loaded dataset was empty, please select another.")
             self.load_frame.grid()
+            # Reset cursor
+            self.config(cursor="")
             return
 
         # Display which event we're at in the statusbar
@@ -1052,7 +1066,7 @@ class TINTagger(tk.Tk):
         self.update_tag_information()
 
         # Get data for this row
-        data = self.get_row_data()
+        data = self.data_processor.get_row_data(self.current_row_index, self.dataset, self.sample_names, self.bam_paths, self.testing)
 
         # Populate the sidebar with general information
         self.location_text["text"] = data["location"]
@@ -1080,6 +1094,9 @@ class TINTagger(tk.Tk):
         elif data["splice_type"] == "AD":
             self.draw_alternative_donor_events(data)
 
+        # Reset cursor now that we're done with loading everything
+        self.config(cursor="")
+
     def update_tag_information(self):
         """
         Reads the number of tagged events in total and populates the statusbar with text about how many
@@ -1102,181 +1119,6 @@ class TINTagger(tk.Tk):
         total_events = len(self.dataset)
         total_tags = positive_tags + negative_tags + neutral_tags
         self.statusbar_text_progress["text"] = "%d/%d" % (total_tags, total_events)
-
-    def get_row_data(self):
-        """
-        Returns formatted data for the current row index.
-        The format is as follows:
-
-        {
-            "splice_type": splice_type,
-            "gene_symbol": gene_symbol,
-            "sample_of_interest": sample_name,
-            "location": coordinates,
-            "exons": exons,
-            "strand": strand,
-            "as_id": as_id,
-            "exon_psi": str(psi),
-            "max_gene_rpkm": float,
-            "samples":
-                {
-                    sample_name:
-                    {
-                        "gene_rpkm": float,
-                        "event_tag": int,
-                        "is_reported": bool,
-                        "exons":
-                        {
-                            exon_name:
-                            {
-                                "coverage": int,
-                                "max_coverage": int,
-                                "psi": float
-                            }
-                        }
-                    }
-                }
-        }
-        """
-        # TODO: Find included_counts and excluded_counts for other exons than the one in question
-
-        # Set waiting cursor
-        self.config(cursor="wait")
-
-        # Get all sample names
-        sample_names = list(self.dataset["name"].unique())
-
-        # Get information
-        splice_type = self.dataset.iloc[self.current_row_index]["splice_type"]
-        sample_name = self.dataset.iloc[self.current_row_index]["name"]
-        as_id = self.dataset.iloc[self.current_row_index]["as_id"]
-        psi = self.dataset.iloc[self.current_row_index]["psi"]
-        gene_symbol = self.dataset.iloc[self.current_row_index]["symbol"]
-        strand = self.dataset.iloc[self.current_row_index]["strand"]
-        exons = self.dataset.iloc[self.current_row_index]["exons"]
-        chrom = self.dataset.iloc[self.current_row_index]["chr"]
-        splice_start = self.dataset.iloc[self.current_row_index]["first_exon_start"]
-        splice_stop = self.dataset.iloc[self.current_row_index]["last_exon_stop"]
-        prev_exon_start = self.dataset.iloc[self.current_row_index]["prev_exon_start"]  # NaN for AT/AP
-        prev_exon_stop = self.dataset.iloc[self.current_row_index]["prev_exon_stop"]  # NaN for AT/AP
-        next_exon_start = self.dataset.iloc[self.current_row_index]["next_exon_start"]  # NaN for AT/AP
-        next_exon_stop = self.dataset.iloc[self.current_row_index]["next_exon_stop"]  # NaN for AT/AP
-        # Handle negative strand start- and stop- coordinates
-        if strand == "-":
-            splice_start = self.dataset.iloc[self.current_row_index]["last_exon_stop"]  # NaN for AT/AP
-            splice_stop = self.dataset.iloc[self.current_row_index]["first_exon_start"]  # NaN for AT/AP
-            prev_exon_start = self.dataset.iloc[self.current_row_index]["prev_exon_stop"]  # NaN for AT/AP
-            prev_exon_stop = self.dataset.iloc[self.current_row_index]["prev_exon_start"]  # NaN for AT/AP
-            next_exon_start = self.dataset.iloc[self.current_row_index]["next_exon_stop"]  # NaN for AT/AP
-            next_exon_stop = self.dataset.iloc[self.current_row_index]["next_exon_start"]  # NaN for AT/AP
-        included_counts = self.dataset.iloc[self.current_row_index]["included_counts"]
-        excluded_counts = self.dataset.iloc[self.current_row_index]["excluded_counts"]
-        prev_exon_name = self.dataset.iloc[self.current_row_index]["exon1"]  # NaN for AT/AP
-        next_exon_name = self.dataset.iloc[self.current_row_index]["exon2"]  # NaN for AT/AP
-        # prev_exon_id = self.dataset.iloc[self.current_row_index]["start_ex"]  # NaN for AT/AP
-        # next_exon_id = self.dataset.iloc[self.current_row_index]["end_ex"]  # NaN for AT/AP
-
-        # Create coordinates from chr, start and stop
-        coordinates = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
-
-        # General row data
-        row_data = {
-            "splice_type": splice_type,
-            "gene_symbol": gene_symbol,
-            "sample_of_interest": sample_name,
-            "location": coordinates,
-            "exons": exons,
-            "strand": strand,
-            "as_id": as_id,
-            "exon_psi": psi,
-            "included_counts": included_counts,
-            "excluded_counts": excluded_counts,
-        }
-
-        # Keep track of exon coverages and gene RPKMs
-        all_gene_rpkms = []
-        upstream_exon_coverages = [-1]
-        downstream_exon_coverages = [-1]
-        exon_of_interest_coverages = [-1]
-
-        ########################
-        # Sample-specific data #
-        ########################
-        samples_data = {}
-        for s_name in sample_names:
-            # Add entry for sample in the container
-            if s_name not in samples_data.keys():
-                samples_data[s_name] = {}
-
-            # Find if sample is reported by SpliceSeq or not
-            is_reported = self.data_processor.is_event_reported_in_sample(s_name, as_id, self.dataset)
-            samples_data[s_name]["is_reported"] = is_reported
-            # Default to sample not being tagged
-            sample_tag = TAG_NO_TAG
-            # Default to RPKM being 0 (in case it's not reported)
-            gene_rpkm = 0
-
-            if is_reported:
-                gene_rpkm = self.data_processor.get_gene_rpkm_by_sample_name(s_name, gene_symbol, self.dataset)
-                sample_tag = self.data_processor.get_sample_tag_by_as_id(s_name, as_id, self.dataset)
-
-            samples_data[s_name]["gene_rpkm"] = gene_rpkm
-            all_gene_rpkms.append(gene_rpkm)
-            samples_data[s_name]["event_tag"] = sample_tag
-
-            #########################
-            # Find exon information #
-            #########################
-            sample_exons = {}
-            # TODO: Also handle AT and AP events
-            if splice_type in ["ES", "ME", "AD", "AA", "RI"]:
-                # Handle upstream exon
-                upstream_exon_coords = str(chrom) + ":" + str(int(prev_exon_start)) + "-" + str(int(prev_exon_stop))
-                upstream_exon = {
-                    "exon_name": prev_exon_name,
-                    "coverage": self.data_processor.get_coverage_by_coordinates(upstream_exon_coords, self.bam_paths[s_name], self.testing)
-                }
-                sample_exons["upstream_exon"] = upstream_exon
-
-                # Handle downstream exon
-                downstream_exon_coords = str(chrom) + ":" + str(int(next_exon_start)) + "-" + str(int(next_exon_stop))
-                downstream_exon = {
-                    "exon_name": next_exon_name,
-                    "coverage": self.data_processor.get_coverage_by_coordinates(downstream_exon_coords, self.bam_paths[s_name], self.testing)
-                }
-                sample_exons["downstream_exon"] = downstream_exon
-
-                # Keep track of coverage values
-                upstream_exon_coverages.append(upstream_exon["coverage"])
-                downstream_exon_coverages.append(downstream_exon["coverage"])
-
-            # Handle the main exon
-            main_exon_coords = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
-            exon_of_interest = {
-                "exon_name": exons,
-                "coverage": self.data_processor.get_coverage_by_coordinates(main_exon_coords, self.bam_paths[s_name], self.testing),
-                "psi": psi,
-                "included_counts": included_counts,
-                "excluded_counts": excluded_counts
-            }
-            sample_exons["exon_of_interest"] = exon_of_interest
-
-            # Keep track of exon coverage values
-            exon_of_interest_coverages.append(exon_of_interest["coverage"])
-
-            # Add exons data to this sample
-            samples_data[s_name]["exons"] = sample_exons
-
-        row_data["samples"] = samples_data
-        row_data["max_gene_rpkm"] = max(all_gene_rpkms)
-        row_data["max_upstream_exon_coverage"] = max(upstream_exon_coverages)
-        row_data["max_downstream_exon_coverage"] = max(downstream_exon_coverages)
-        row_data["max_exon_of_interest_coverage"] = max(exon_of_interest_coverages)
-
-        # Reset cursor to normal again
-        self.config(cursor="")
-
-        return row_data
 
     def save_file(self):
         print "Bleep, blop, saving file."
@@ -1302,7 +1144,6 @@ class TINTagger(tk.Tk):
         """
         Handles next-button presses: Update row index and initiate reading of new row.
         """
-
         self.current_row_index += 1
         if self.current_row_index > len(self.dataset):
             print "Wops, no more rows (reached end of dataset)"
