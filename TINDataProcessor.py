@@ -63,7 +63,7 @@ class TINDataProcessor(object):
         # TODO: Don't do this; return full dataset
         df = df.loc[df.splice_type == "ES"]
 
-        # TODO: Count occurrences if not already done
+        # Count occurrences if not already done
         if "occurrences" not in list(df.columns):
             df["occurrences"] = df.groupby("as_id")["name"].transform(len)
 

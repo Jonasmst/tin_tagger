@@ -13,6 +13,7 @@ from TINDataProcessor import TINDataProcessor
 
 # TODO: Cache rows so we don't need to run samtools etc when pressing previous-button
 # TODO: Find PSI, included counts, excluded counts for other exons and display if it's available (gonna be an sql-call).
+# TODO: Pre-fetch a number of rows in the background (e.g. fetch samtools-coverage/spliceseq DB-stuff for e.g. 100 rows)
 
 """
 ################################################
@@ -1461,8 +1462,24 @@ class TINTagger(tk.Tk):
         if not is_reported:
             algo_tag_color = COLOR_DARKWHITE
         # END TEST: Algo tag
-        button_frame = tk.Frame(self.exon_frame, bg=algo_tag_color, padx=2, pady=0, borderwidth=0, relief=tk.SOLID)
-        button_frame.grid(row=row_number, column=1, sticky="NEWS")
+
+        # Create a frame in which to store algorithm tag indicator + frame for buttons
+        tagging_container = ttk.Frame(self.exon_frame)
+        algo_tag_frame_column = 1
+        button_frame_column = 0
+        algo_tag_indicator_width = 5
+        # Make the button frame expand to fill the remaining space
+        tagging_container.grid(row=row_number, column=1, sticky="NEWS")
+        # Make both the algo-tag indicator and the button frame fill vertical space
+        tagging_container.columnconfigure(button_frame_column, weight=1)
+        tagging_container.rowconfigure(0, weight=1)
+
+        # Create a frame for algorithm tag indicator
+        algo_tag_frame = tk.Frame(tagging_container, bg=algo_tag_color, width=algo_tag_indicator_width)
+        algo_tag_frame.grid(row=0, column=algo_tag_frame_column, sticky="NEWS")
+
+        button_frame = ttk.Frame(tagging_container)
+        button_frame.grid(row=0, column=button_frame_column, sticky="NEWS")
         # Tag interesting button
         up_button_style = STYLE_BUTTON_INTERESTING_ON if sample_tag == TAG_INTERESTING else STYLE_BUTTON_INTERESTING_OFF
         up_button = ttk.Button(
