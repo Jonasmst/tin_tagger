@@ -14,6 +14,10 @@ from TINDataProcessor import TINDataProcessor
 # TODO: Cache rows so we don't need to run samtools etc when pressing previous-button
 # TODO: Find PSI, included counts, excluded counts for other exons and display if it's available (gonna be an sql-call).
 # TODO: Pre-fetch a number of rows in the background (e.g. fetch samtools-coverage/spliceseq DB-stuff for e.g. 100 rows)
+# TODO: Draw stepped coverage-indicator (as in IGV) for every region reported by samtools and not only display the average (can draw over the exons, e.g.)
+# TODO: Since we're now displaying and tagging all samples, a per-row approach doesn't make sense anymore. Should be based on as_id so we don't display duplicates that have already been tagged.
+# TODO: Instead of highlighting the sample canvas, we should highlight the exon column (not the unreported ones, though).
+# TODO: Normalize counts for sequencing depth (can I use the RPKM? No! The gene may not be expressed, which has nothing to do with seq. depth)
 
 """
 ################################################
@@ -984,6 +988,8 @@ class TINTagger(tk.Tk):
             foreground=[("active", COLOR_UNCERTAIN)]
         )
 
+        style.configure("Graytext.TLabel", foreground=COLOR_DARKWHITE)
+
     def open_file(self):
         """
         Presents a filedialog for the user to choose a file. If a file is selected, the dataset is read
@@ -1223,9 +1229,14 @@ class TINTagger(tk.Tk):
             display_text = "%s gene RPKM: %s/%s (%.0f%%)" % (
             sample_name, str(gene_rpkm), str(data["max_gene_rpkm"]), gene_rpkm_percent_of_max)
             frame_for_sample.bind("<Enter>", store_rpkm_text(display_text))
+            rpkm_color = COLOR_RED
 
             # Create text for sample name
-            sample_text = ttk.Label(frame_for_sample, text=sample_name, font="TkDefaultFont", anchor=tk.CENTER)
+            text_style = "TLabel"
+            if not sample_data["is_reported"]:
+                text_style = "Graytext.TLabel"
+                rpkm_color = COLOR_DARKWHITE
+            sample_text = ttk.Label(frame_for_sample, text=sample_name, font="TkDefaultFont", anchor=tk.CENTER, style=text_style)
             sample_text.grid(column=0, row=0, sticky="NEWS")
             frame_for_sample.columnconfigure(0, weight=9)
 
@@ -1239,10 +1250,10 @@ class TINTagger(tk.Tk):
             remainder_frame = ttk.Frame(rpkm_frame, width=10)
             if gene_rpkm_percent_of_max == 100:
                 # Hack to make it look like it's actually 100% and not just 99%
-                remainder_frame = tk.Frame(rpkm_frame, width=10, background=COLOR_RED)
+                remainder_frame = tk.Frame(rpkm_frame, width=10, background=rpkm_color)
             remainder_frame.grid(column=0, row=0, sticky="NEWS")
             # Fill for RPKM
-            fill_frame = tk.Frame(rpkm_frame, bg=COLOR_RED)
+            fill_frame = tk.Frame(rpkm_frame, bg=rpkm_color)
             fill_frame.grid(column=0, row=1, sticky="NEWS")
             rpkm_frame.rowconfigure(0, weight=100 - int(gene_rpkm_percent_of_max))
             rpkm_frame.rowconfigure(1, weight=int(gene_rpkm_percent_of_max))
