@@ -306,6 +306,13 @@ class TINTagger(tk.Tk):
         # Keep track of which row we're working on
         current_row = 1
 
+        # Alternative splicing ID
+        asid_label = ttk.Label(sidebar_information, text="AS ID:", font=label_font)
+        asid_label.grid(column=0, row=current_row, sticky="W")
+        self.asid_text = ttk.Label(sidebar_information, text="<AS ID>", font=text_font)
+        self.asid_text.grid(column=1, row=current_row, sticky="W", columnspan=2)
+        current_row += 1
+
         # Sample
         sample_label = ttk.Label(sidebar_information, text="Sample name:", font=label_font)
         sample_label.grid(column=0, row=current_row, sticky="W")
@@ -1070,6 +1077,7 @@ class TINTagger(tk.Tk):
         data = self.data_processor.get_row_data(self.current_row_index, self.dataset, self.sample_names, self.bam_paths, self.testing)
 
         # Populate the sidebar with general information
+        self.asid_text["text"] = data["as_id"]
         self.location_text["text"] = data["location"]
         self.splice_type_text["text"] = "%s (%s)" % (self.splice_type_map[data["splice_type"]], data["splice_type"])
         self.exons_text["text"] = data["exons"]
