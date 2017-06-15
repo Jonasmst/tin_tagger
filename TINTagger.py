@@ -18,6 +18,8 @@ from TINDataProcessor import TINDataProcessor
 # TODO: Since we're now displaying and tagging all samples, a per-row approach doesn't make sense anymore. Should be based on as_id so we don't display duplicates that have already been tagged.
 # TODO: Instead of highlighting the sample canvas, we should highlight the exon column (not the unreported ones, though).
 # TODO: Normalize counts for sequencing depth (can I use the RPKM? No! The gene may not be expressed, which has nothing to do with seq. depth): SpliceSeqDB has sample.alignedReads that I can use.
+# TODO: Use SpliceSeqDB.exon_counts.rpkm instead of SAMtools depth -r? Or in addition?
+# TODO: Sort dataset by gene, then "exons" to show similar events after each other?
 
 
 """
@@ -1103,12 +1105,15 @@ class TINTagger(tk.Tk):
         self.exon_frame = self.create_exon_frame()
 
         # Draw events
-        if data["splice_type"] == "AT":
+        splice_type = data["splice_type"]
+        if splice_type == "AT":
             self.draw_alternative_terminator_event(data)
-        elif data["splice_type"] == "ES":
+        elif splice_type == "ES":
             self.draw_exon_skipping_event(data)
-        elif data["splice_type"] == "AD":
+        elif splice_type == "AD":
             self.draw_alternative_donor_events(data)
+        elif splice_type == "RI":
+            self.draw_retained_intron_event(data)
 
         # Reset cursor now that we're done with loading everything
         self.config(cursor="")
@@ -1723,6 +1728,255 @@ class TINTagger(tk.Tk):
             row_canvas.create_text(text_start_x, text_start_y, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
 
             # Update row index for next sample
+            row_number += 1
+
+    def draw_retained_intron_event(self, data):
+        """
+        Draws retained introns
+        """
+        ######################################
+        # Fill in samples information column #
+        ######################################
+        self.populate_samples_frame(data)
+
+        ################################
+        # Draw exon names in top frame #
+        ################################
+        # TODO: This should be its own function (it's the same for all splice types except AT/AP
+        as_id = data["as_id"]
+        # Keep track of row number
+        row_number = 0
+        # Draw exon names on top
+        exon_name_frame = ttk.Frame(self.exon_frame)
+        exon_name_frame.grid(column=0, row=row_number, sticky="NEWS")
+        self.exon_frame.columnconfigure(0, weight=1)
+        row_number += 1
+
+        # Add upstream exon name
+        upstream_exon_name = data["samples"].values()[0]["exons"]["upstream_exon"]["exon_name"]
+        if len(upstream_exon_name) > 15:
+            upstream_exon_name = upstream_exon_name[:14] + ".."
+        upstream_label = ttk.Label(exon_name_frame, text=upstream_exon_name, font="tkDefaultFont 16", anchor=tk.CENTER)
+        upstream_label.grid(column=0, row=0, sticky="NEWS")
+
+        # Add exon of interest name
+        exon_name = data["exons"]
+        if len(exon_name) > 15:
+            exon_name = exon_name[:14] + ".."
+        exon_of_interest_label = ttk.Label(exon_name_frame, text=exon_name, font="tkDefaultFont 16 bold", anchor=tk.CENTER)
+        exon_of_interest_label.grid(column=1, row=0, sticky="NEWS")
+
+        # Add downstream exon nmae
+        downstream_exon_name = data["samples"].values()[0]["exons"]["downstream_exon"]["exon_name"]
+        if len(downstream_exon_name) > 15:
+            downstream_exon_name = downstream_exon_name[:14] + ".."
+        downstream_label = ttk.Label(exon_name_frame, text=downstream_exon_name, font="tkDefaultFont 16", anchor=tk.CENTER)
+        downstream_label.grid(column=2, row=0, sticky="NEWS")
+
+        # Finally, add twice the weight for intron column
+        exon_name_frame.columnconfigure(0, weight=1)
+        exon_name_frame.columnconfigure(1, weight=2)
+        exon_name_frame.columnconfigure(2, weight=1)
+
+        ##############
+        # Draw exons #
+        ##############
+        # Dimension variables
+        canvas_width = 300
+        canvas_height = 100
+        # exon_width = 60
+        # intron_width = exon_width * 2
+
+        intron_container_width = canvas_width / 2
+        exon_container_width = canvas_width / 4
+        exon_width = exon_container_width * 0.8
+        upstream_exon_start_x = (exon_container_width / 2) - (exon_width / 2)
+        upstream_exon_stop_x = upstream_exon_start_x + exon_width
+        exon_to_intron_distance = upstream_exon_start_x
+        intron_start_x = exon_container_width - exon_to_intron_distance
+        intron_stop_x = exon_container_width + intron_container_width + exon_to_intron_distance
+        downstream_exon_start_x = intron_stop_x
+        downstream_exon_stop_x = downstream_exon_start_x + exon_width
+
+
+        #exon_to_intron_distance = (exon_container_width - exon_width) / 2
+
+        #width_per_exon_container = canvas_width / 3
+        exon_height = 80
+        exon_start_y = (canvas_height - exon_height) / 2
+        intron_height = 5
+        intron_start_y = (canvas_height - intron_height) / 2
+
+        # Iterate samples
+        for sample_name in sorted(data["samples"].keys(), key=natural_sort_key):
+            sample_data = data["samples"][sample_name]
+            # Sample-specific variables
+            is_reported = sample_data["is_reported"]
+            sample_tag = sample_data["event_tag"]
+            # Get sample exons
+            upstream_exon = sample_data["exons"]["upstream_exon"]
+            intron = sample_data["exons"]["exon_of_interest"]
+            downstream_exon = sample_data["exons"]["downstream_exon"]
+            # Setup colors
+            canvas_background = "white"
+            exon_color = COLOR_BLUE
+            exon_bordercolor = COLOR_DARKBLUE
+            intron_color = COLOR_DARKBLUE
+            intron_border_color = COLOR_DARKBLUE
+            # If event is not reported, draw monochrome canvas
+            if not is_reported:
+                exon_color = COLOR_DARKGRAY
+                exon_bordercolor = COLOR_DARKGRAY
+                intron_color = COLOR_DARKGRAY
+                intron_border_color = canvas_background
+            # Initialize canvas and grid to this row in the exon frame
+            row_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=canvas_height)
+            row_canvas.grid(row=row_number, column=0, sticky="NEWS")
+            # Keep track of canvases used
+            self.canvases.append(row_canvas)
+            # Setup tagging buttons
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            # Set even weight for every row in the exon frame
+            self.exon_frame.rowconfigure(row_number, weight=1)
+            # Add separator
+            row_number += 1
+            sep = tk.Frame(self.exon_frame, bg=COLOR_DARKWHITE, height=2)
+            sep.grid(row=row_number, column=0, sticky="NEWS")
+            button_sep = tk.Frame(self.exon_frame, bg=COLOR_DARKWHITE, height=2)
+            button_sep.grid(row=row_number, column=1, sticky="NEWS")
+
+            ######################
+            # Draw upstream exon #
+            ######################
+            upstream_exon_coverage = upstream_exon["coverage"]
+            upstream_exon_max_coverage = data["max_upstream_exon_coverage"]
+            percent_of_max_coverage = (float(upstream_exon_coverage) / float(upstream_exon_max_coverage)) * 100
+            #upstream_exon_start_x = (width_per_exon_container - exon_width) / 2
+            # Draw exon background
+            row_canvas.create_rectangle(
+                upstream_exon_start_x,
+                exon_start_y,
+                upstream_exon_stop_x,
+                #upstream_exon_start_x + exon_width,
+                exon_start_y + exon_height,
+                fill=canvas_background
+            )
+            # Draw exon fill
+            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
+            fill_end_y = exon_start_y + exon_height
+            row_canvas.create_rectangle(
+                upstream_exon_start_x,
+                fill_start_y,
+                #upstream_exon_start_x + exon_width,
+                upstream_exon_stop_x,
+                fill_end_y,
+                fill=exon_color,
+                outline=exon_bordercolor
+            )
+            # Draw coverage text
+            text_start_x = upstream_exon_start_x + (exon_width / 2)
+            text_start_y = exon_height - 10
+            row_canvas.create_text(
+                text_start_x + 1,
+                text_start_y + 1,
+                text=str(upstream_exon_coverage),
+                font="tkDefaultFont 16",
+                fill=COLOR_CANVAS_TEXT_SHADOW,
+                tags="text_shadow"
+            )
+            row_canvas.create_text(
+                text_start_x,
+                text_start_y,
+                text=str(upstream_exon_coverage),
+                font="tkDefaultFont 16",
+                fill=COLOR_CANVAS_TEXT,
+            )
+
+            ########################
+            # Draw downstream exon #
+            ########################
+            downstream_exon_coverage = downstream_exon["coverage"]
+            downstream_exon_max_coverage = data["max_downstream_exon_coverage"]
+            percent_of_max_coverage = (float(downstream_exon_coverage) / float(downstream_exon_max_coverage)) * 100
+            #downstream_exon_start_x = intron_start_x + intron_width
+            # Draw exon background
+            row_canvas.create_rectangle(
+                downstream_exon_start_x,
+                exon_start_y,
+                #downstream_exon_start_x + exon_width,
+                downstream_exon_stop_x,
+                exon_start_y + exon_height,
+                fill=canvas_background,
+                outline=exon_bordercolor
+            )
+            # Draw exon fill
+            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage / 100) * exon_height))
+            row_canvas.create_rectangle(
+                downstream_exon_start_x,
+                fill_start_y,
+                downstream_exon_start_x + exon_width,
+                fill_end_y,
+                fill=exon_color,
+                outline=exon_bordercolor
+            )
+            # Draw coverage text
+            text_start_x = downstream_exon_start_x + (exon_width / 2)
+            row_canvas.create_text(
+                text_start_x + 1,
+                text_start_y + 1,
+                text=str(downstream_exon_coverage),
+                font="tkDefaultFont 16",
+                fill=COLOR_CANVAS_TEXT_SHADOW,
+                tags="text_shadow"
+            )
+            row_canvas.create_text(
+                text_start_x,
+                text_start_y,
+                text=str(downstream_exon_coverage),
+                font="tkDefaultFont 16",
+                fill=COLOR_CANVAS_TEXT
+            )
+
+            ###############
+            # Draw intron #
+            ###############
+            intron_coverage = intron["coverage"]
+            intron_max_coverage = data["max_exon_of_interest_coverage"]
+            percent_of_max_coverage = (float(intron_coverage) / float(intron_max_coverage)) * 100
+            intron_start_x = upstream_exon_start_x + exon_width
+            # Draw intron coverage fill
+            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
+            # Draw intron fill
+            row_canvas.create_rectangle(
+                intron_start_x,
+                fill_start_y,
+                intron_stop_x,
+                fill_end_y,
+                fill=intron_color,
+                outline=intron_border_color
+            )
+            # Draw coverage text
+            text_start_x = intron_start_x + (500 / 2)
+            text_start_x = (canvas_width / 2)
+            row_canvas.create_text(
+                text_start_x + 1,
+                text_start_y + 1,
+                text=str(intron_coverage),
+                font="tkDefaultFont16",
+                fill=COLOR_CANVAS_TEXT_SHADOW,
+                tags="text_shadow"
+            )
+            row_canvas.create_text(
+                text_start_x,
+                text_start_y,
+                text=str(intron_coverage),
+                font="tkDefaultFont 16",
+                fill=COLOR_CANVAS_TEXT,
+            )
+
+            ####################################
+            # Update row index for next sample #
+            ####################################
             row_number += 1
 
 
