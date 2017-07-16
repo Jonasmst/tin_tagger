@@ -225,7 +225,15 @@ class TINDataProcessor(object):
     def get_main_exon_psi_by_asid(self, sample_names, as_id):
         """
         Queries the SpliceSeq database for PSI values for a given as_id in all samples.
-        Returns a DataFrame.
+        Returns a dictionary on the form:
+        {
+            "<sample name>": {
+                "sample_id": <sample ID>,
+                "psi": <PSI>,
+                "included_counts": <included counts>,
+                "excluded_counts": <excluded_counts>
+            },
+        }
         """
         print "Finding main exon PSI, included counts, excluded counts."
         query = """
@@ -248,6 +256,7 @@ class TINDataProcessor(object):
         if not self.testing:
             df = pd.read_sql_query(query, self.db)
         else:
+            # If test-running, create dummy-data
             df = pd.DataFrame({
                 "as_id": [71] * 10,
                 "sample_id": [3, 4, 7, 8, 9, 10, 11, 12, 13, 14],
@@ -257,7 +266,19 @@ class TINDataProcessor(object):
                 "excluded_counts": [66, 81, 79, 83, 75, 39, 66, 61, 67, 75]
             })
 
-        return df
+        # Create a formatted dictionary for the results
+        results_dict = {}
+        for sample_name in sample_names:
+            results_dict[sample_name] = {}
+            sample_df = df.loc[df["name"] == sample_name]
+
+            # Add sample-specific data to results
+            results_dict[sample_name]["sample_id"] = sample_df["sample_id"].iloc[0]
+            results_dict[sample_name]["psi"] = sample_df["psi"].iloc[0]
+            results_dict[sample_name]["included_counts"] = sample_df["included_counts"].iloc[0]
+            results_dict[sample_name]["excluded_counts"] = sample_df["excluded_counts"].iloc[0]
+
+        return results_dict
 
     def get_main_exon_rpkm_by_asid(self, sample_names, as_id):
         """
@@ -265,11 +286,14 @@ class TINDataProcessor(object):
         Returns a dictionary on the form:
         {
             "<sample name>": {
-                <exon_id>: {
-                    "rpkm": <rpkm value>,
-                    "max_rpkm": <max rpkm value>,
-                    "tot_reads": <total reads value>
-                },
+                "combined_rpkm": <total rpkm value for all exons combined>,
+                "max_combined_rpkm": <max combined_rpkm across all samples>,
+                "exons":
+                    <exon_id>: {
+                        "rpkm": <rpkm value>,
+                        "max_rpkm": <max rpkm value>,
+                        "tot_reads": <total reads value>
+                    },
             },
         }
         """

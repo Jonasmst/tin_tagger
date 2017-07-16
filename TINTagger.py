@@ -1617,7 +1617,8 @@ class TINTagger(tk.Tk):
 
         # Get rpkm/tot_reads for flanking exons
         flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
-        main_exon_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
+        main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
+        main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
 
         # Iterate samples
         for sample_name in sample_names_sorted:
@@ -1669,9 +1670,9 @@ class TINTagger(tk.Tk):
             ######################
             # Draw upstream exon #
             ######################
-            upstream_exon_coverage = upstream_exon["coverage"]
-            upstream_exon_max_coverage = data["max_upstream_exon_coverage"]
-            percent_of_max_coverage = (float(upstream_exon_coverage) / float(upstream_exon_max_coverage)) * 100
+            # upstream_exon_coverage = upstream_exon["coverage"]
+            # upstream_exon_max_coverage = data["max_upstream_exon_coverage"]
+            # percent_of_max_coverage = (float(upstream_exon_coverage) / float(upstream_exon_max_coverage)) * 100
             upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
             upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
             percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
@@ -1702,10 +1703,18 @@ class TINTagger(tk.Tk):
             # main_exon_max_coverage = data["max_exon_of_interest_coverage"]
             # percent_of_max_coverage = (float(main_exon_coverage) / float(main_exon_max_coverage)) * 100
 
-            sample_data = main_exon_data[sample_name]
-            combined_rpkm = sample_data["combined_rpkm"]
-            max_combined_rpkm = sample_data["max_combined_rpkm"]
+            # Get RPKM values
+            sample_rpkm_data = main_exon_rpkm_data[sample_name]
+            combined_rpkm = sample_rpkm_data["combined_rpkm"]
+            max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
             percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+
+            # Get PSI values
+            sample_psi_data = main_exon_psi_data[sample_name]
+            sample_psi = sample_psi_data["psi"]
+            sample_included_counts = sample_psi_data["included_counts"]
+            sample_excluded_counts = sample_psi_data["excluded_counts"]
+            # TODO: Draw PSI, included counts and excluded counts to UI
 
             main_exon_start_x = upstream_exon_start_x + width_per_exon_container  # Not sure if this is correct
 
@@ -1731,9 +1740,13 @@ class TINTagger(tk.Tk):
             ########################
             # Draw downstream exon #
             ########################
-            downstream_exon_coverage = downstream_exon["coverage"]
-            downstream_exon_max_coverage = data["max_downstream_exon_coverage"]
-            percent_of_max_coverage = (float(downstream_exon_coverage) / float(downstream_exon_max_coverage)) * 100
+            # downstream_exon_coverage = downstream_exon["coverage"]
+            # downstream_exon_max_coverage = data["max_downstream_exon_coverage"]
+            # percent_of_max_coverage = (float(downstream_exon_coverage) / float(downstream_exon_max_coverage)) * 100
+
+            downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
+            downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
 
             downstream_exon_start_x = main_exon_start_x + width_per_exon_container
 
@@ -1741,13 +1754,16 @@ class TINTagger(tk.Tk):
             row_canvas.create_rectangle(downstream_exon_start_x, exon_start_y, downstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
 
             # Draw exon fill
-            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
+            # fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
+            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_rpkm/100) * exon_height))
             row_canvas.create_rectangle(downstream_exon_start_x, fill_start_y, downstream_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor)
 
             # Draw coverage text
             text_start_x = downstream_exon_start_x + (exon_width / 2)
-            row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            row_canvas.create_text(text_start_x, text_start_y, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+            # row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(downstream_exon_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            # row_canvas.create_text(text_start_x, text_start_y, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+            row_canvas.create_text(text_start_x, text_start_y, text=str(downstream_exon_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
 
             # Update row index for next sample
             row_number += 1
