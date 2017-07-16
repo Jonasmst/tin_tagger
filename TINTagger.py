@@ -1611,8 +1611,15 @@ class TINTagger(tk.Tk):
         exon_height = 80
         exon_start_y = (canvas_height - exon_height) / 2
 
+        sample_names_sorted = sorted(data["samples"].keys(), key=natural_sort_key)
+        prev_exon_id = data["prev_exon_id"]
+        next_exon_id = data["next_exon_id"]
+
+        # Get rpkm/tot_reads for flanking exons
+        flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
+
         # Iterate samples
-        for sample_name in sorted(data["samples"].keys(), key=natural_sort_key):
+        for sample_name in sample_names_sorted:
             sample_data = data["samples"][sample_name]
 
             # Sample-specific variables
@@ -1664,6 +1671,9 @@ class TINTagger(tk.Tk):
             upstream_exon_coverage = upstream_exon["coverage"]
             upstream_exon_max_coverage = data["max_upstream_exon_coverage"]
             percent_of_max_coverage = (float(upstream_exon_coverage) / float(upstream_exon_max_coverage)) * 100
+            upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
+            upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
 
             upstream_exon_start_x = (width_per_exon_container - exon_width) / 2
 
@@ -1671,15 +1681,18 @@ class TINTagger(tk.Tk):
             row_canvas.create_rectangle(upstream_exon_start_x, exon_start_y, upstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
 
             # Draw exon fill
-            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
+            # fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
+            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_rpkm/100) * exon_height))
             fill_end_y = exon_start_y + exon_height
             row_canvas.create_rectangle(upstream_exon_start_x, fill_start_y, upstream_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor)
 
             # Draw coverage text
             text_start_x = upstream_exon_start_x + (exon_width / 2)
             text_start_y = exon_height - 10
-            row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(upstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            row_canvas.create_text(text_start_x, text_start_y, text=str(upstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+            # row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(upstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(upstream_exon_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            # row_canvas.create_text(text_start_x, text_start_y, text=str(upstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+            row_canvas.create_text(text_start_x, text_start_y, text=str(upstream_exon_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
 
             ##################
             # Draw main exon #
