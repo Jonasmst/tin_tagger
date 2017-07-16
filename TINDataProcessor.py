@@ -3,12 +3,16 @@ import pandas as pd
 import os
 import json
 import random
+import MySQLdb as mysql
 
 
 class TINDataProcessor(object):
 
     def __init__(self, tag_no_tag):
+        self.testing = True
         self.tag_no_tag = tag_no_tag
+        if not self.testing:
+            self.db = mysql.connect("localhost", "crc_spliceseq", "TODO:insert_password_here", "crc_spliceseq")
 
     def load_dataset(self, filepath):
         """
@@ -218,6 +222,184 @@ class TINDataProcessor(object):
         except IndexError as e:
             print "ERROR: Can't find row index for sample %s, as_id %d. Message:\n%s" % (sample_name, as_id, e.message)
 
+    def get_main_exon_psi_by_asid(self, sample_names, as_id):
+        """
+        Queries the SpliceSeq database for PSI values for a given as_id in all samples.
+        Returns a DataFrame.
+        """
+        print "Finding main exon PSI, included counts, excluded counts."
+        query = """
+        SELECT
+            a.as_id,
+            a.sample_id,
+            sample.name,
+            a.psi,
+            a.included_counts,
+            a.excluded_counts
+        FROM as_counts AS a
+        INNER JOIN sample
+            ON sample.sample_id=a.sample_id
+        WHERE
+            sample.name IN(%s)
+            AND
+             a.as_id=%d
+        """ % (",".join('"' + s + '"' for s in sample_names), as_id)
+
+        if not self.testing:
+            df = pd.read_sql_query(query, self.db)
+        else:
+            df = pd.DataFrame({
+                "as_id": [71] * 10,
+                "sample_id": [3, 4, 7, 8, 9, 10, 11, 12, 13, 14],
+                "name": ["sample%s" % str(x) for x in range(1, 11)],
+                "psi": [0.044, 0.334, 0.026, 0.022, 0, 0, 0, 0, 0, 0],
+                "included_counts": [6, 6, 4, 4, 0, 0, 0, 0, 0, 0],
+                "excluded_counts": [66, 81, 79, 83, 75, 39, 66, 61, 67, 75]
+            })
+
+        return df
+
+    def get_main_exon_rpkm_by_asid(self, sample_names, as_id):
+        """
+        Queries the SpliceSeq database for RPKM values for a given exon.
+        Returns a DataFrame.
+        """
+
+        print "Finding main exon RPKM"
+        query = """
+        SELECT
+            s.name,
+            s.sample_id,
+            are.as_id,
+            are.exon_id,
+            ec.tot_reads,
+            ec.rpkm
+        FROM sample AS s
+        INNER JOIN exon_counts AS ec
+            ON s.sample_id=ec.sample_id
+        INNER JOIN as_ref_exon AS are
+            ON ec.exon_id=are.exon_id
+        WHERE
+            are.as_id=%d
+            AND
+            s.name IN(%s)
+        """ % (as_id, ", ".join('"' + s + '"' for s in sample_names))
+
+        if not self.testing:
+            df = pd.read_sql_query(query, self.db)
+        else:
+            df = pd.DataFrame({
+                "name": ["sample1", "sample2", "sample3", "sample4", "sample5", "sample8", "sample9", "sample10", "sample1", "sample2", "sample3", "sample"] + ["sample1", "sample2", "sample3", "sample4"],
+                "sample_id": [3, 4, 7, 8, 9, 12, 13, 14, 3, 4, 7, 8],
+                "as_id": [71] * 12,
+                "exon_id": [210] * 8 + [211] * 4,
+                "tot_reads": [13, 12, 7, 8, 8, 5, 7, 8, 1, 2, 4, 1],
+                "rpkm": [1.09, 0.96, 0.63, 0.58, 0.61, 0.42, 0.60, 0.66, 0.09, 0.17, 0.39, 0.07]
+            })
+
+        # TODO: Handle DF: Forward-fill zeros for unreported RPKMs, add together RPKMs for multiple exons into a total_rpkm column.
+
+        return df
+
+    def get_flanking_exons_rpkm_by_exon_ids(self, sample_names, prev_exon_id, next_exon_id):
+        """
+        Queries the SpliceSeq database for RPKM values for the flanking exons.
+        Returns a dictionary of rpkm and tot_reads values for each exon in each sample:
+        {
+            "<sample name>": {
+                "<exon id>": {
+                    "rpkm": <rpkm_value>,
+                    "tot_reads": <tot_reads_value>
+                }
+            }
+        }
+        """
+
+        print "Finding flanking exons RPKM"
+        query = """
+        SELECT
+            s.name,
+            e.sample_id,
+            e.exon_id,
+            e.tot_reads,
+            e.rpkm
+        FROM exon_counts AS e
+        INNER JOIN sample AS s
+            ON s.sample_id=e.sample_id
+        WHERE
+            s.name IN(%s)
+            AND
+            e.exon_id IN(%s)
+        """ % (", ".join("'" + s + "'" for s in sample_names), ", ".join(str(x) for x in [prev_exon_id, next_exon_id]))
+
+        if not self.testing:
+            df = pd.read_sql_query(query, self.db)
+        else:
+            df = pd.DataFrame({
+                "name": ["sample%s" % str(x) for x in range(1, 11)] * 2,
+                "sample_id": [3, 4, 7, 8, 9, 10, 11, 12, 13, 14] * 2,
+                "exon_id": [prev_exon_id] * 10 + [next_exon_id] * 10,
+                "tot_reads": [118, 135, 115, 125, 133, 58, 93, 93, 106, 136, 190, 200, 181, 190, 229, 134, 133, 154, 166, 188],
+                "rpkm": [13.3, 14.5, 14.0, 12.3, 13.6, 5.4, 12.2, 10.5, 12.3, 15.2, 16.9, 17.1, 17.5, 14.8, 18.5, 10.0, 13.8, 13.7, 15.3, 16.6]
+            })
+
+        # If resulting dataframe is empty, create an empty DF with the correct column names so the merge still completes.
+        if df.empty:
+            df = pd.DataFrame({
+                "name": [],
+                "exon_id": [],
+                "sample_id": [],
+                "tot_reads": [],
+                "rpkm": []
+            })
+
+        # Rename resulting dataframe
+        final_dataframe = df
+
+        # Detect and handle unreported samples
+        # If there's not (number of samples * number of exons) rows, something's missing
+        if len(df) > (2 * len(sample_names)):
+            # Create template DataFrame to compare to resulting dataframe, containing sample names and exon ids
+            number_of_samples = len(sample_names)
+            template_df = pd.DataFrame({
+                "name": sample_names * 2,
+                "exon_id": [prev_exon_id] * number_of_samples + [next_exon_id] * number_of_samples
+            })
+
+            # Merge template DF with result DF to produce NaNs for RPKM and tot_reads in unreported samples
+            merged_dataframe = template_df.merge(df, how="left", on=["rpkm", "tot_reads"])
+
+            # Fill NaNs in rpkm and tot_reads columns with 0s
+            final_dataframe = merged_dataframe.fillna(0, axis=1)
+
+        # Convert output to a dictionary
+        results_dict = {}
+        # Include max RPKM for both exons
+        prev_exon_max_rpkm = final_dataframe.loc[final_dataframe["exon_id"] == prev_exon_id]["rpkm"].max()
+        next_exon_max_rpkm = final_dataframe.loc[final_dataframe["exon_id"] == next_exon_id]["rpkm"].max()
+        max_rpkms = {
+            prev_exon_id: prev_exon_max_rpkm,
+            next_exon_id: next_exon_max_rpkm
+        }
+        for sample_name in sample_names:
+            results_dict[sample_name] = {}
+
+            # Get info about this sample
+            sample_df = final_dataframe.loc[final_dataframe["name"] == sample_name]
+
+            # Get info about both exons in this sample
+            for exon_id in [prev_exon_id, next_exon_id]:
+                exon_df = sample_df.loc[sample_df["exon_id"] == exon_id]
+                results_dict[sample_name][exon_id] = {}
+                results_dict[sample_name][exon_id]["rpkm"] = exon_df["rpkm"].iloc[0]
+                results_dict[sample_name][exon_id]["tot_reads"] = exon_df["tot_reads"].iloc[0]
+                results_dict[sample_name][exon_id]["max_rpkm"] = max_rpkms[exon_id]
+
+        print "Flanking exons RPKM/tot_reads dict:"
+        print json.dumps(results_dict, indent=4)
+
+        return results_dict
+
     def get_row_data(self, current_row_index, dataset, sample_names, bam_paths, testing):
         """
         Returns formatted data for the current row index.
@@ -282,8 +464,16 @@ class TINDataProcessor(object):
         excluded_counts = dataset.iloc[current_row_index]["excluded_counts"]
         prev_exon_name = dataset.iloc[current_row_index]["exon1"]  # NaN for AT/AP
         next_exon_name = dataset.iloc[current_row_index]["exon2"]  # NaN for AT/AP
-        # prev_exon_id = dataset.iloc[current_row_index]["start_ex"]  # NaN for AT/AP
-        # next_exon_id = dataset.iloc[current_row_index]["end_ex"]  # NaN for AT/AP
+        prev_exon_id = dataset.iloc[current_row_index]["start_ex"]  # NaN for AT/AP
+        next_exon_id = dataset.iloc[current_row_index]["end_ex"]  # NaN for AT/AP
+
+        print "AS_ID:", as_id
+        print "Exon name:", exons
+        print "Prev exon name:", prev_exon_name
+        print "Prev exon ID:", int(prev_exon_id)
+        print "Next exon name:", next_exon_name
+        print "Next exon ID:", int(next_exon_id)
+        print "-------------------------------"
 
         # Create coordinates from chr, start and stop
         coordinates = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
@@ -300,6 +490,8 @@ class TINDataProcessor(object):
             "exon_psi": psi,
             "included_counts": included_counts,
             "excluded_counts": excluded_counts,
+            "prev_exon_id": int(prev_exon_id),
+            "next_exon_id": int(next_exon_id)
         }
 
         # Keep track of exon coverages and gene RPKMs
@@ -382,6 +574,7 @@ class TINDataProcessor(object):
         row_data["max_exon_of_interest_coverage"] = max(exon_of_interest_coverages)
 
         return row_data
+
 
 
 
