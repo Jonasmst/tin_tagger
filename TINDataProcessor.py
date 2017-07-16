@@ -262,8 +262,30 @@ class TINDataProcessor(object):
     def get_main_exon_rpkm_by_asid(self, sample_names, as_id):
         """
         Queries the SpliceSeq database for RPKM values for a given exon.
-        Returns a DataFrame.
+        Returns a dictionary on the form:
+        {
+            "<sample name>": {
+                <exon_id>: {
+                    "rpkm": <rpkm value>,
+                    "max_rpkm": <max rpkm value>,
+                    "tot_reads": <total reads value>
+                },
+            },
+        }
         """
+
+        # First, find how many (partial) exons are in this splicing events
+        if not self.testing:
+            # TODO: Handle this being empty
+            num_exons_query = "SELECT * FROM as_ref_exon WHERE as_id=%d;" % as_id
+            num_exons_result = pd.read_sql_query(num_exons_query, self.db)
+        else:
+            num_exons_result = pd.DataFrame({
+                "as_id": [as_id] * 2,
+                "exon_id": [210, 211]
+            })
+
+        affected_exon_ids = list(num_exons_result["exon_id"].unique())
 
         print "Finding main exon RPKM"
         query = """
@@ -289,7 +311,7 @@ class TINDataProcessor(object):
             df = pd.read_sql_query(query, self.db)
         else:
             df = pd.DataFrame({
-                "name": ["sample1", "sample2", "sample3", "sample4", "sample5", "sample8", "sample9", "sample10", "sample1", "sample2", "sample3", "sample"] + ["sample1", "sample2", "sample3", "sample4"],
+                "name": ["sample1", "sample2", "sample3", "sample4", "sample5", "sample8", "sample9", "sample10"] + ["sample1", "sample2", "sample3", "sample4"],
                 "sample_id": [3, 4, 7, 8, 9, 12, 13, 14, 3, 4, 7, 8],
                 "as_id": [71] * 12,
                 "exon_id": [210] * 8 + [211] * 4,
@@ -297,9 +319,80 @@ class TINDataProcessor(object):
                 "rpkm": [1.09, 0.96, 0.63, 0.58, 0.61, 0.42, 0.60, 0.66, 0.09, 0.17, 0.39, 0.07]
             })
 
-        # TODO: Handle DF: Forward-fill zeros for unreported RPKMs, add together RPKMs for multiple exons into a total_rpkm column.
+        # If resulting dataframe is empty, create an empty DF with the correct column names so the merge still completes.
+        if df.empty:
+            df = pd.DataFrame({
+                "name": [],
+                "sample_id": [],
+                "as_id": [],
+                "exon_id": [],
+                "tot_reads": [],
+                "rpkm": []
+            })
 
-        return df
+        # Rename resulting dataframe
+        final_dataframe = df
+
+        # Detect and handle unreported samples
+        # If there's not (number of samples * number of exons) rows, something's missing
+        if len(df) < (len(affected_exon_ids) * len(sample_names)):
+            # Create template DataFrame to compare to resulting dataframe, containing sample names and exon ids
+            number_of_samples = len(sample_names)
+            template_exon_ids = []
+            for exon in affected_exon_ids:
+                template_exon_ids = template_exon_ids + [exon] * len(sample_names)
+            template_df = pd.DataFrame({
+                "name": sample_names * 2,
+                "exon_id": template_exon_ids
+            })
+
+            # Merge with resulting dataframe
+            merged = template_df.merge(df, on=["name", "exon_id"], how="left")
+
+            # Forward fill as_id column
+            merged["as_id"].fillna(method="ffill", inplace=True)
+
+            # Fill rpkm and tot reads to 0
+            filled = merged.fillna(0, axis=1)
+
+            # Update dtypes that have somehow become floats
+            filled[["as_id", "sample_id", "tot_reads"]] = filled[["as_id", "sample_id", "tot_reads"]].astype(int)
+
+            final_dataframe = filled
+
+        # Create column for combined RPKM and max combined RPKM
+        final_dataframe["combined_rpkm"] = final_dataframe.groupby(["name", "exon_id"])["rpkm"].transform(sum)
+        final_dataframe["max_combined_rpkm"] = final_dataframe["combined_rpkm"].max()
+
+        # Convert output to a dictionary
+        results_dict = {}
+        max_rpkms = {}
+        for ex in affected_exon_ids:
+            max_rpkms[ex] = final_dataframe.loc[final_dataframe["exon_id"] == ex]["rpkm"].max()
+
+        for sample_name in sample_names:
+            results_dict[sample_name] = {}
+
+            # Get info about this sample
+            sample_df = final_dataframe.loc[final_dataframe["name"] == sample_name]
+            results_dict[sample_name]["combined_rpkm"] = sample_df["combined_rpkm"].iloc[0]
+            results_dict[sample_name]["max_combined_rpkm"] = sample_df["max_combined_rpkm"].iloc[0]
+
+            # Create dictionary for exons
+            results_dict[sample_name]["exons"] = {}
+
+            # Get info about all exons in this sample
+            for exon_id in affected_exon_ids:
+                exon_df = sample_df.loc[sample_df["exon_id"] == exon_id]
+                results_dict[sample_name]["exons"][exon_id] = {}
+                results_dict[sample_name]["exons"][exon_id]["rpkm"] = exon_df["rpkm"].iloc[0]
+                results_dict[sample_name]["exons"][exon_id]["max_rpkm"] = max_rpkms[exon_id]
+                results_dict[sample_name]["exons"][exon_id]["tot_reads"] = exon_df["tot_reads"].iloc[0]
+
+        print "Main exon RPKM query resulting dictionary:"
+        print json.dumps(results_dict, indent=4)
+
+        return results_dict
 
     def get_flanking_exons_rpkm_by_exon_ids(self, sample_names, prev_exon_id, next_exon_id):
         """
@@ -358,7 +451,7 @@ class TINDataProcessor(object):
 
         # Detect and handle unreported samples
         # If there's not (number of samples * number of exons) rows, something's missing
-        if len(df) > (2 * len(sample_names)):
+        if len(df) < (2 * len(sample_names)):
             # Create template DataFrame to compare to resulting dataframe, containing sample names and exon ids
             number_of_samples = len(sample_names)
             template_df = pd.DataFrame({
@@ -395,8 +488,8 @@ class TINDataProcessor(object):
                 results_dict[sample_name][exon_id]["tot_reads"] = exon_df["tot_reads"].iloc[0]
                 results_dict[sample_name][exon_id]["max_rpkm"] = max_rpkms[exon_id]
 
-        print "Flanking exons RPKM/tot_reads dict:"
-        print json.dumps(results_dict, indent=4)
+        # print "Flanking exons RPKM/tot_reads dict:"
+        # print json.dumps(results_dict, indent=4)
 
         return results_dict
 
