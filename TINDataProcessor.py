@@ -5,6 +5,14 @@ import json
 import random
 import MySQLdb as mysql
 
+# TODO: Check that label "event_tag" is present in the dataset. If not, create one and set all to default (-1)
+# TODO: Deprecate samtools for now
+# TODO: Max 2 decimals on exon coverage values
+
+TAG_INTERESTING = 0
+TAG_NOT_INTERESTING = 1
+TAG_UNCERTAIN = 2
+TAG_NO_TAG = -1
 
 class TINDataProcessor(object):
 
@@ -70,6 +78,10 @@ class TINDataProcessor(object):
         # Count occurrences if not already done
         if "occurrences" not in list(df.columns):
             df["occurrences"] = df.groupby("as_id")["name"].transform(len)
+
+        # Add event_tag column if not present
+        if "event_tag" not in list(df.columns):
+            df["event_tag"] = TAG_NO_TAG  # Default to no tag
 
         return df
 
