@@ -8,10 +8,9 @@ import MySQLdb as mysql
 # TODO: Check that label "event_tag" is present in the dataset. If not, create one and set all to default (-1)
 # TODO: Deprecate samtools for now
 # TODO: Max 2 decimals on exon coverage values
+# TODO: Test the relative differences between exons when using SAMtools and DB RPKM.
+# - Are the relative differences the same? Otherwise, which one should we use?
 
-TAG_INTERESTING = 0
-TAG_NOT_INTERESTING = 1
-TAG_UNCERTAIN = 2
 TAG_NO_TAG = -1
 
 class TINDataProcessor(object):
@@ -21,6 +20,8 @@ class TINDataProcessor(object):
         self.tag_no_tag = tag_no_tag
         if not self.testing:
             self.db = mysql.connect("localhost", "crc_spliceseq", "TODO:insert_password_here", "crc_spliceseq")
+
+        self.samtools_enabled = False  # Flag to determine whether or not to use SAMtools. For testing.
 
     def load_dataset(self, filepath):
         """
@@ -172,7 +173,7 @@ class TINDataProcessor(object):
             # Data not found for this sample/gene
             return 0.0
 
-    def get_coverage_by_coordinates(self, coordinates, bam_file_path, testing):
+    def get_samtools_coverage_by_coordinates(self, coordinates, bam_file_path, testing):
         """
         Runs samtools depth -r on a BAM-file to find the average number of reads covering a region. Returns the
         average coverage. The param 'testing' indicates whether or not the program is run for testing purposes
@@ -534,32 +535,25 @@ class TINDataProcessor(object):
         Returns formatted data for the current row index.
         The format is as follows:
 
-        {
-            "splice_type": splice_type,
-            "gene_symbol": gene_symbol,
-            "sample_of_interest": sample_name,
-            "location": coordinates,
-            "exons": exons,
-            "strand": strand,
-            "as_id": as_id,
-            "exon_psi": str(psi),
-            "max_gene_rpkm": float,
+        row_data = {
+            "splice_type": <splice_type>,
+            "gene_symbol": <gene_symbol>,
+            "location": <coordinates>,
+            "exons": <exons>,
+            "strand": <strand>,
+            "as_id": <as_id>,
+            "max_gene_rpkm": <max_gene_rpkm>,
+            "prev_exon_id": <prev_exon_id>,
+            "next_exon_id": <next_exon_id>,
+            "prev_exon_name": <prev_exon_name>,
+            "next_exon_name": <next_exon_name>,
             "samples":
                 {
-                    sample_name:
+                    <sample_name>:
                     {
                         "gene_rpkm": float,
                         "event_tag": int,
                         "is_reported": bool,
-                        "exons":
-                        {
-                            exon_name:
-                            {
-                                "coverage": int,
-                                "max_coverage": int,
-                                "psi": float
-                            }
-                        }
                     }
                 }
         }
@@ -611,23 +605,18 @@ class TINDataProcessor(object):
         row_data = {
             "splice_type": splice_type,
             "gene_symbol": gene_symbol,
-            "sample_of_interest": sample_name,
             "location": coordinates,
             "exons": exons,
             "strand": strand,
             "as_id": as_id,
-            "exon_psi": psi,
-            "included_counts": included_counts,
-            "excluded_counts": excluded_counts,
             "prev_exon_id": int(prev_exon_id),
-            "next_exon_id": int(next_exon_id)
+            "next_exon_id": int(next_exon_id),
+            "prev_exon_name": prev_exon_name,
+            "next_exon_name": next_exon_name,
         }
 
         # Keep track of exon coverages and gene RPKMs
         all_gene_rpkms = []
-        upstream_exon_coverages = [-1]
-        downstream_exon_coverages = [-1]
-        exon_of_interest_coverages = [-1]
 
         ########################
         # Sample-specific data #
@@ -653,54 +642,8 @@ class TINDataProcessor(object):
             all_gene_rpkms.append(gene_rpkm)
             samples_data[s_name]["event_tag"] = sample_tag
 
-            #########################
-            # Find exon information #
-            #########################
-            sample_exons = {}
-            # TODO: Also handle AT and AP events
-            if splice_type in ["ES", "ME", "AD", "AA", "RI"]:
-                # Handle upstream exon
-                upstream_exon_coords = str(chrom) + ":" + str(int(prev_exon_start)) + "-" + str(int(prev_exon_stop))
-                upstream_exon = {
-                    "exon_name": prev_exon_name,
-                    "coverage": self.get_coverage_by_coordinates(upstream_exon_coords, bam_paths[s_name], testing)
-                }
-                sample_exons["upstream_exon"] = upstream_exon
-
-                # Handle downstream exon
-                downstream_exon_coords = str(chrom) + ":" + str(int(next_exon_start)) + "-" + str(int(next_exon_stop))
-                downstream_exon = {
-                    "exon_name": next_exon_name,
-                    "coverage": self.get_coverage_by_coordinates(downstream_exon_coords, bam_paths[s_name], testing)
-                }
-                sample_exons["downstream_exon"] = downstream_exon
-
-                # Keep track of coverage values
-                upstream_exon_coverages.append(upstream_exon["coverage"])
-                downstream_exon_coverages.append(downstream_exon["coverage"])
-
-            # Handle the main exon
-            main_exon_coords = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
-            exon_of_interest = {
-                "exon_name": exons,
-                "coverage": self.get_coverage_by_coordinates(main_exon_coords, bam_paths[s_name], testing),
-                "psi": psi,
-                "included_counts": included_counts,
-                "excluded_counts": excluded_counts
-            }
-            sample_exons["exon_of_interest"] = exon_of_interest
-
-            # Keep track of exon coverage values
-            exon_of_interest_coverages.append(exon_of_interest["coverage"])
-
-            # Add exons data to this sample
-            samples_data[s_name]["exons"] = sample_exons
-
         row_data["samples"] = samples_data
         row_data["max_gene_rpkm"] = max(all_gene_rpkms)
-        row_data["max_upstream_exon_coverage"] = max(upstream_exon_coverages)
-        row_data["max_downstream_exon_coverage"] = max(downstream_exon_coverages)
-        row_data["max_exon_of_interest_coverage"] = max(exon_of_interest_coverages)
 
         return row_data
 

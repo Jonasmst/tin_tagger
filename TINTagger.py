@@ -326,13 +326,6 @@ class TINTagger(tk.Tk):
         self.asid_text.grid(column=1, row=current_row, sticky="W", columnspan=2)
         current_row += 1
 
-        # Sample
-        sample_label = ttk.Label(sidebar_information, text="Sample name:", font=label_font)
-        sample_label.grid(column=0, row=current_row, sticky="W")
-        self.sample_text = ttk.Label(sidebar_information, text="<Sample name>", font=text_font)
-        self.sample_text.grid(column=1, row=current_row, sticky="W", columnspan=2)
-        current_row += 1
-
         # Gene symbol
         gene_label = ttk.Label(sidebar_information, text="Gene symbol:", font=label_font)
         gene_label.grid(column=0, row=current_row, sticky=tk.W)
@@ -352,27 +345,6 @@ class TINTagger(tk.Tk):
         exons_label.grid(column=0, row=current_row, sticky="W")
         self.exons_text = ttk.Label(sidebar_information, text="<Exons>", font=text_font, wraplength=250)
         self.exons_text.grid(column=1, row=current_row, sticky="W", columnspan=2)
-        current_row += 1
-
-        # PSI
-        psi_label = ttk.Label(sidebar_information, text="PSI:", font=label_font)
-        psi_label.grid(column=0, row=current_row, sticky=tk.W)
-        self.psi_text = ttk.Label(sidebar_information, text="<PSI>", font=text_font)
-        self.psi_text.grid(column=1, row=current_row, sticky=tk.W, columnspan=2)
-        current_row += 1
-
-        # Included counts
-        included_counts_label = ttk.Label(sidebar_information, text="Included counts:", font=label_font)
-        included_counts_label.grid(column=0, row=current_row, sticky="W")
-        self.included_counts_text = ttk.Label(sidebar_information, text="<Included counts>", font=text_font)
-        self.included_counts_text.grid(column=1, row=current_row, columnspan=2, sticky="W")
-        current_row += 1
-
-        # Excluded counts
-        excluded_counts_label = ttk.Label(sidebar_information, text="Excluded counts:", font=label_font)
-        excluded_counts_label.grid(column=0, row=current_row, sticky="W")
-        self.excluded_counts_text = ttk.Label(sidebar_information, text="<Excluded counts>", font=text_font)
-        self.excluded_counts_text.grid(column=1, row=current_row, columnspan=2, sticky="W")
         current_row += 1
 
         # Strand
@@ -1128,12 +1100,8 @@ class TINTagger(tk.Tk):
         self.location_text["text"] = data["location"]
         self.splice_type_text["text"] = "%s (%s)" % (self.splice_type_map[data["splice_type"]], data["splice_type"])
         self.exons_text["text"] = data["exons"]
-        self.sample_text["text"] = data["sample_of_interest"]
         self.gene_text["text"] = data["gene_symbol"]
         self.strand_text["text"] = data["strand"]
-        self.psi_text["text"] = "%.2f" % data["exon_psi"]
-        self.included_counts_text["text"] = str(data["included_counts"])
-        self.excluded_counts_text["text"] = str(data["excluded_counts"])
 
         # Clear all canvases before drawing new ones
         self.clear_all_canvases()
@@ -1610,7 +1578,7 @@ class TINTagger(tk.Tk):
         row_number += 1
 
         # Add upstream exon name
-        upstream_exon_name = data["samples"].values()[0]["exons"]["upstream_exon"]["exon_name"]
+        upstream_exon_name = data["prev_exon_name"]
         if len(upstream_exon_name) > 15:
             upstream_exon_name = upstream_exon_name[:14] + ".."
 
@@ -1625,7 +1593,7 @@ class TINTagger(tk.Tk):
         exon_of_interest_label.grid(column=1, row=0, sticky="NEWS")
 
         # Add downstream exon name
-        downstream_exon_name = data["samples"].values()[0]["exons"]["downstream_exon"]["exon_name"]
+        downstream_exon_name = data["next_exon_name"]
         if len(downstream_exon_name) > 15:
             downstream_exon_name = downstream_exon_name[:14] + ".."
 
@@ -1666,19 +1634,10 @@ class TINTagger(tk.Tk):
             is_reported = sample_data["is_reported"]
             sample_tag = sample_data["event_tag"]
 
-            # Get sample exons
-            upstream_exon = sample_data["exons"]["upstream_exon"]
-            main_exon = sample_data["exons"]["exon_of_interest"]
-            downstream_exon = sample_data["exons"]["downstream_exon"]
-
             # Setup colors
             canvas_background = "white"
             exon_color = COLOR_BLUE
             exon_bordercolor = COLOR_DARKBLUE
-
-            # Highlight background for sample of interest
-            if sample_name == data["sample_of_interest"]:
-                canvas_background = COLOR_SAMPLE_HIGHLIGHT
 
             # If event is not reported, draw monochrome canvas
             if not is_reported:
@@ -1708,9 +1667,6 @@ class TINTagger(tk.Tk):
             ######################
             # Draw upstream exon #
             ######################
-            # upstream_exon_coverage = upstream_exon["coverage"]
-            # upstream_exon_max_coverage = data["max_upstream_exon_coverage"]
-            # percent_of_max_coverage = (float(upstream_exon_coverage) / float(upstream_exon_max_coverage)) * 100
             upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
             upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
             percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
@@ -1721,7 +1677,6 @@ class TINTagger(tk.Tk):
             row_canvas.create_rectangle(upstream_exon_start_x, exon_start_y, upstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
 
             # Draw exon fill
-            # fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
             fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_rpkm/100) * exon_height))
             fill_end_y = exon_start_y + exon_height
             row_canvas.create_rectangle(upstream_exon_start_x, fill_start_y, upstream_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor)
@@ -1729,18 +1684,12 @@ class TINTagger(tk.Tk):
             # Draw coverage text
             text_start_x = upstream_exon_start_x + (exon_width / 2)
             text_start_y = exon_height - 10
-            # row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(upstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
             row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(upstream_exon_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            # row_canvas.create_text(text_start_x, text_start_y, text=str(upstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
             row_canvas.create_text(text_start_x, text_start_y, text=str(upstream_exon_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
 
             ##################
             # Draw main exon #
             ##################
-            # main_exon_coverage = main_exon["coverage"]
-            # main_exon_max_coverage = data["max_exon_of_interest_coverage"]
-            # percent_of_max_coverage = (float(main_exon_coverage) / float(main_exon_max_coverage)) * 100
-
             # Get RPKM values
             sample_rpkm_data = main_exon_rpkm_data[sample_name]
             combined_rpkm = sample_rpkm_data["combined_rpkm"]
@@ -1756,32 +1705,22 @@ class TINTagger(tk.Tk):
 
             main_exon_start_x = upstream_exon_start_x + width_per_exon_container  # Not sure if this is correct
 
-            border_width = 1
-            if sample_name == data["sample_of_interest"]:
-                border_width = 3
-
             # Draw exon background
+            border_width = 1
             row_canvas.create_rectangle(main_exon_start_x, exon_start_y, main_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor, width=border_width)
 
             # Draw exon fill
-            # fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
             fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_rpkm/100) * exon_height))
             row_canvas.create_rectangle(main_exon_start_x, fill_start_y, main_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor, width=border_width)
 
             # Draw coverage text
             text_start_x = main_exon_start_x + (exon_width / 2)
-            # row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(main_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
             row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(combined_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            # row_canvas.create_text(text_start_x, text_start_y, text=str(main_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
             row_canvas.create_text(text_start_x, text_start_y, text=str(combined_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
 
             ########################
             # Draw downstream exon #
             ########################
-            # downstream_exon_coverage = downstream_exon["coverage"]
-            # downstream_exon_max_coverage = data["max_downstream_exon_coverage"]
-            # percent_of_max_coverage = (float(downstream_exon_coverage) / float(downstream_exon_max_coverage)) * 100
-
             downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
             downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
             percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
@@ -1798,9 +1737,7 @@ class TINTagger(tk.Tk):
 
             # Draw coverage text
             text_start_x = downstream_exon_start_x + (exon_width / 2)
-            # row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
             row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(downstream_exon_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            # row_canvas.create_text(text_start_x, text_start_y, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
             row_canvas.create_text(text_start_x, text_start_y, text=str(downstream_exon_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
 
             # Update row index for next sample
