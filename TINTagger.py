@@ -1021,7 +1021,7 @@ class TINTagger(tk.Tk):
         """
         # TODO: Handle empty dataset / non-compliant data formats
         # Feedback: Show busy cursor while dataset is loaded
-        self.config(cursor="wait")
+        self.config(cursor="watch")
 
         # Get dataset
         self.dataset = self.data_processor.load_dataset(filepath)
@@ -1046,7 +1046,7 @@ class TINTagger(tk.Tk):
         """
 
         # Set waiting cursor
-        self.config(cursor="wait")
+        self.config(cursor="watch")
 
         # If no dataset is loaded, prompt user to load one
         try:

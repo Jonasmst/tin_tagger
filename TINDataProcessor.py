@@ -463,6 +463,7 @@ class TINDataProcessor(object):
         """ % (", ".join("'" + s + "'" for s in sample_names), ", ".join(str(x) for x in [prev_exon_id, next_exon_id]))
 
         if not self.testing:
+            print "Querying database"
             df = pd.read_sql_query(query, self.db)
         else:
             df = pd.DataFrame({
