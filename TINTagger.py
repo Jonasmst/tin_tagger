@@ -20,6 +20,10 @@ from TINDataProcessor import TINDataProcessor
 # TODO: Normalize counts for sequencing depth (can I use the RPKM? No! The gene may not be expressed, which has nothing to do with seq. depth): SpliceSeqDB has sample.alignedReads that I can use.
 # TODO: Use SpliceSeqDB.exon_counts.rpkm instead of SAMtools depth -r? Or in addition?
 # TODO: Sort dataset by gene, then "exons" to show similar events after each other?
+# TODO: Wait -> Watch for TK Cursors
+# TODO: Text is huge on linux
+# TODO: Add menu item for changing tt.Style().theme_names()
+# TODO: Add feedback as text in the statusbar when connecting to DB and reading datasets. Blink/animate (non-static)
 
 
 """
@@ -131,19 +135,20 @@ class TINTagger(tk.Tk):
         # Super init
         tk.Tk.__init__(self, *args, **kwargs)
 
-        # TEST: Different styles (frame backgrounds)
-        #s = ttk.Style()
-        #s.theme_use("classic")
-        #s.configure("TFrame", background=COLOR_DARKBLUE)
-        #s.configure("TLabel", background=COLOR_DARKBLUE, foreground=COLOR_WHITE)
-        # END TEST
+        # Different themes
+        self.style = ttk.Style()
+        self.available_themes = self.style.theme_names()
+        self.current_theme = tk.StringVar(self)
+        self.current_theme.set(self.style.theme_use())
+        self.current_theme.trace("w", self.change_theme)
 
         # Set testing or not
         self.testing = True
 
         if self.testing:
             # Mac ghetto-fix for bringing GUI to front when running.
-            os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
+            #os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
+            pass
 
         #####################
         # Various variables #
@@ -195,6 +200,7 @@ class TINTagger(tk.Tk):
         self.bind("<Control-o>", lambda event=None: self.open_file())
         self.bind("<Control-s>", lambda event=None: self.save_file())
         self.bind("<Control-f>", lambda event=None: self.show_filter_dataset_window())
+        self.bind("<Control-a>", lambda event=None: self.show_options())
         self.bind("<Left>", self.left_arrow_clicked)
         self.bind("<Right>", self.right_arrow_clicked)
 
@@ -508,6 +514,8 @@ class TINTagger(tk.Tk):
         sub_menu.add_command(label="Open file...", command=self.open_file, accelerator="Ctrl+O")
         sub_menu.add_command(label="Save", command=self.save_file, accelerator="Ctrl+S")
         sub_menu.add_separator()
+        sub_menu.add_command(label="Options", command=self.show_options, accelerator="Ctrl+A")
+        sub_menu.add_separator()
         sub_menu.add_command(label="Quit", accelerator="Escape", command=lambda: self.close_window(event=None))
 
         # Add dataset menu
@@ -518,6 +526,36 @@ class TINTagger(tk.Tk):
         dataset_menu.add_separator()
         dataset_menu.add_command(label="Open filters..", command=self.read_dataset_filters)
         dataset_menu.add_command(label="Save current filters", command=self.save_dataset_filters)
+
+    def show_options(self):
+        """
+        Displays a window with options.
+        """
+        ############################################
+        # Create a window to display everything in #
+        ############################################
+        options_window = tk.Toplevel()
+        options_window.bind("<Escape>", lambda event=None: options_window.destroy())
+        options_window.wm_title("Options")
+
+        # A frame to hold the different options
+        options_frame = ttk.Frame(options_window, padding=(20, 20, 20, 20))
+        options_frame.grid(column=0, row=0, sticky="NEWS")
+        options_frame.focus_force()  # Force focus to a widget in this window so that binds work
+
+        # Add a label
+        theme_label = ttk.Label(options_frame, text="Visual theme:", font="tkDefaultFont")
+        theme_label.grid(column=0, row=0, sticky="NEWS")
+
+        # Add an options menu with theme options
+        theme_menu = ttk.OptionMenu(options_frame, self.current_theme, self.current_theme.get(), *self.available_themes)
+        theme_menu.grid(column=1, row=0, sticky="NEWS")
+
+    def change_theme(self, *args):
+        """
+        Called when a theme is changed in the options menu. Traces the self.current_theme variable. Changes theme.
+        """
+        self.style.theme_use(self.current_theme.get())
 
     def show_filter_dataset_window(self):
 
