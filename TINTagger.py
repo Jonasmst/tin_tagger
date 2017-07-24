@@ -1718,6 +1718,12 @@ class TINTagger(tk.Tk):
             row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(combined_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
             row_canvas.create_text(text_start_x, text_start_y, text=str(combined_rpkm), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
 
+            # TEST: Draw PSI and counts
+            psi_text_start_y = text_start_y - 20
+            psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
+            row_canvas.create_text(text_start_x, psi_text_start_y, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+            # END TEST
+
             ########################
             # Draw downstream exon #
             ########################
