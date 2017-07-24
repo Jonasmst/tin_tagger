@@ -379,7 +379,7 @@ class TINDataProcessor(object):
             for exon in affected_exon_ids:
                 template_exon_ids = template_exon_ids + [exon] * len(sample_names)
             template_df = pd.DataFrame({
-                "name": sample_names * 2,
+                "name": sample_names * len(affected_exon_ids),
                 "exon_id": template_exon_ids
             })
 
