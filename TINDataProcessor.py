@@ -285,11 +285,15 @@ class TINDataProcessor(object):
             results_dict[sample_name] = {}
             sample_df = df.loc[df["name"] == sample_name]
 
-            # Add sample-specific data to results
-            results_dict[sample_name]["sample_id"] = sample_df["sample_id"].iloc[0]
-            results_dict[sample_name]["psi"] = sample_df["psi"].iloc[0]
-            results_dict[sample_name]["included_counts"] = sample_df["included_counts"].iloc[0]
-            results_dict[sample_name]["excluded_counts"] = sample_df["excluded_counts"].iloc[0]
+            if sample_df.empty:
+                results_dict[sample_name]["is_reported"] = False
+            else:
+                # Add sample-specific data to results
+                results_dict[sample_name]["sample_id"] = sample_df["sample_id"].iloc[0]
+                results_dict[sample_name]["psi"] = sample_df["psi"].iloc[0]
+                results_dict[sample_name]["included_counts"] = sample_df["included_counts"].iloc[0]
+                results_dict[sample_name]["excluded_counts"] = sample_df["excluded_counts"].iloc[0]
+                results_dict[sample_name]["is_reported"] = True
 
         return results_dict
 

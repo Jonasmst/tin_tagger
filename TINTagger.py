@@ -1697,11 +1697,16 @@ class TINTagger(tk.Tk):
             percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
 
             # Get PSI values
-            sample_psi_data = main_exon_psi_data[sample_name]
-            sample_psi = sample_psi_data["psi"]
-            sample_included_counts = sample_psi_data["included_counts"]
-            sample_excluded_counts = sample_psi_data["excluded_counts"]
-            # TODO: Draw PSI, included counts and excluded counts to UI
+            if not main_exon_psi_data[sample_name]["is_reported"]:
+                # No data for this sample
+                sample_psi = -1
+                sample_excluded_counts = -1
+                sample_included_counts = -1
+            else:
+                sample_psi_data = main_exon_psi_data[sample_name]
+                sample_psi = sample_psi_data["psi"]
+                sample_included_counts = sample_psi_data["included_counts"]
+                sample_excluded_counts = sample_psi_data["excluded_counts"]
 
             main_exon_start_x = upstream_exon_start_x + width_per_exon_container  # Not sure if this is correct
 
