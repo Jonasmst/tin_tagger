@@ -74,7 +74,7 @@ class TINDataProcessor(object):
         df.exon2 = df.exon2.str.replace("\.0$", "")
 
         # TODO: Don't do this; return full dataset
-        df = df.loc[df.splice_type == "AD"]
+        df = df.loc[df.splice_type == "AA"]
 
         # Count occurrences if not already done
         if "occurrences" not in list(df.columns):
