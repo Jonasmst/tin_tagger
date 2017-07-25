@@ -74,7 +74,7 @@ class TINDataProcessor(object):
         df.exon2 = df.exon2.str.replace("\.0$", "")
 
         # TODO: Don't do this; return full dataset
-        df = df.loc[df.splice_type == "ES"]
+        df = df.loc[df.splice_type == "RI"]
 
         # Count occurrences if not already done
         if "occurrences" not in list(df.columns):
@@ -475,7 +475,7 @@ class TINDataProcessor(object):
                 "sample_id": [3, 4, 7, 8, 9, 10, 11, 12, 13, 14] * 2,
                 "exon_id": [prev_exon_id] * 10 + [next_exon_id] * 10,
                 "tot_reads": [118, 135, 115, 125, 133, 58, 93, 93, 106, 136, 190, 200, 181, 190, 229, 134, 133, 154, 166, 188],
-                "rpkm": [13.3, 14.5, 14.0, 12.3, 13.6, 5.4, 12.2, 10.5, 12.3, 15.2, 16.9, 17.1, 17.5, 14.8, 18.5, 10.0, 13.8, 13.7, 15.3, 16.6]
+                "rpkm": [130001.3, 14.5, 14.0, 12.3, 13.6, 5.4, 12.2, 10.5, 12.3, 15.2, 16.9, 17.1, 17.5, 14.8, 18.5, 10.0, 13.8, 13.7, 15.3, 16.6]
             })
 
         # If resulting dataframe is empty, create an empty DF with the correct column names so the merge still completes.
