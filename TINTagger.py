@@ -1278,167 +1278,6 @@ class TINTagger(tk.Tk):
             # For this to look nice, the sample_frame needs a 1-wide padding at the bottom.
             # END TEST
 
-    def draw_alternative_donor_events(self, data):
-        """
-        Draws alternative donor site events.
-        """
-
-        # Fill in samples information column
-        self.populate_samples_frame(data)
-
-        # Get strand information to know which way to draw exons
-        strand = data["strand"]
-
-        # Keep track of current row
-        row_number = 0
-
-        # First, draw a top frame containing exon names
-        exon_name_frame = ttk.Frame(self.exon_frame)
-        exon_name_frame.grid(column=0, row=row_number, sticky="NEWS")
-
-        row_number += 1
-
-        # Add upstream exon name
-        upstream_exon_name = data["samples"].values()[0]["exons"]["upstream_exon"]["exon_name"]
-        if len(upstream_exon_name) > 15:
-            upstream_exon_name = upstream_exon_name[:14] + ".."
-
-        upstream_label = ttk.Label(exon_name_frame, text=upstream_exon_name, font="tkDefaultFont 16", anchor=tk.E)
-        upstream_label.grid(column=0, row=0, sticky="NEWS")
-
-        # Add exon of interest name
-        exon_name = data["exons"]
-        if len(exon_name) > 15:
-            exon_name = exon_name[:14] + ".."
-        exon_of_interest_label = ttk.Label(exon_name_frame, text=exon_name, font="tkDefaultFont 16 bold", anchor=tk.CENTER)
-        exon_of_interest_label.grid(column=1, row=0, sticky="NEWS")
-
-        # Add downstream exon name
-        downstream_exon_name = data["samples"].values()[0]["exons"]["downstream_exon"]["exon_name"]
-        if len(downstream_exon_name) > 15:
-            downstream_exon_name = downstream_exon_name[:14] + ".."
-
-        downstream_label = ttk.Label(exon_name_frame, text=downstream_exon_name, font="tkDefaultFont 16", anchor=tk.W)
-        downstream_label.grid(column=2, row=0, sticky="NEWS")
-
-        # Finally, add even weight for all exon names
-        exon_name_frame.columnconfigure(0, weight=1)
-        exon_name_frame.columnconfigure(1, weight=1)
-        exon_name_frame.columnconfigure(2, weight=1)
-
-        ############################################
-        ################ Draw exons ################
-        ############################################
-
-        # Dimension variables
-        canvas_width = 300
-        canvas_height = 100
-        donor_site_width = (canvas_width / 3) * 2
-        upstream_exon_width = 60
-        main_exon_width = 30
-        downstream_exon_width = 60
-        exon_height = 80
-        exon_start_y = (canvas_height - exon_height) / 2
-
-        # Iterate samples
-        for sample_name in sorted(data["samples"].keys(), key=natural_sort_key):
-            sample_data = data["samples"][sample_name]
-
-            # Get sample exons
-            upstream_exon = sample_data["exons"]["upstream_exon"]
-            exon_of_interest = sample_data["exons"]["exon_of_interest"]
-            downstream_exon = sample_data["exons"]["downstream_exon"]
-
-            # Highlight background for sample of interest
-            canvas_background = COLOR_WHITE
-            if sample_name == data["sample_of_interest"]:
-                canvas_background = COLOR_SAMPLE_HIGHLIGHT
-
-            # Initialize canvas and grid it to this row in the exon frame
-            row_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=canvas_height)
-            row_canvas.grid(row=row_number, column=0, sticky="NEWS")
-
-            # Keep track of canvases uses
-            self.canvases.append(row_canvas)
-
-            # Set even weight for every row in the center frame
-            self.exon_frame.rowconfigure(row_number, weight=1)
-
-            ######################
-            # Draw upstream exon #
-            ######################
-            upstream_coverage = upstream_exon["coverage"]
-            max_coverage = data["max_upstream_exon_coverage"]
-            percent_of_max_coverage = (float(upstream_coverage) / float(max_coverage)) * 100
-
-            upstream_exon_start_x = (donor_site_width - upstream_exon_width) / 2
-
-            # Draw exon background
-            row_canvas.create_rectangle(upstream_exon_start_x, exon_start_y, upstream_exon_start_x + upstream_exon_width, exon_start_y + exon_height, fill=canvas_background)
-
-            # Draw exon fill
-            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
-            fill_end_y = exon_start_y + exon_height
-            row_canvas.create_rectangle(upstream_exon_start_x, fill_start_y, upstream_exon_start_x + upstream_exon_width, fill_end_y, fill=COLOR_BLUE, outline=COLOR_DARKBLUE)
-
-            # Draw coverage text
-            text_start_x = upstream_exon_start_x + (upstream_exon_width / 2)
-            text_start_y = exon_height - 10
-            row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(upstream_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            row_canvas.create_text(text_start_x, text_start_y, text=str(upstream_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
-
-            ##################
-            # Draw main exon #
-            ##################
-            main_exon_coverage = exon_of_interest["coverage"]
-            main_exon_max_coverage = data["max_exon_of_interest_coverage"]
-            percent_of_max_coverage = (float(main_exon_coverage) / float(main_exon_max_coverage)) * 100
-
-            main_exon_start_x = upstream_exon_start_x + upstream_exon_width
-
-            border_width = 1
-            if sample_name == data["sample_of_interest"]:
-                border_width = 3
-
-            # Draw exon background
-            row_canvas.create_rectangle(main_exon_start_x, exon_start_y, main_exon_start_x + main_exon_width, exon_start_y + exon_height, fill=canvas_background, width=border_width)
-
-            # Draw exon fill
-            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
-            row_canvas.create_rectangle(main_exon_start_x, fill_start_y, main_exon_start_x + main_exon_width, fill_end_y, fill=COLOR_BLUE, outline=COLOR_DARKBLUE, width=border_width)
-
-            # Draw coverage text
-            text_start_x = main_exon_start_x + (main_exon_width / 2)
-            row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(main_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            row_canvas.create_text(text_start_x, text_start_y, text=str(main_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
-
-            ########################
-            # Draw downstream exon #
-            ########################
-            downstream_exon_coverage = downstream_exon["coverage"]
-            downstream_exon_max_coverage = data["max_downstream_exon_coverage"]
-            percent_of_max_coverage = (float(downstream_exon_coverage) / float(downstream_exon_max_coverage)) * 100
-
-            downstream_exon_start_x = donor_site_width  # Not sure if this is right
-
-            # Draw exon background
-            row_canvas.create_rectangle(downstream_exon_start_x, exon_start_y, downstream_exon_start_x + downstream_exon_width, exon_start_y + exon_height, fill=canvas_background)
-
-            # Draw exon fill
-            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
-            row_canvas.create_rectangle(downstream_exon_start_x, fill_start_y, downstream_exon_start_x + downstream_exon_width, fill_end_y, fill=COLOR_BLUE, outline=COLOR_DARKBLUE)
-
-            # Draw coverage text
-            text_start_x = downstream_exon_start_x + (downstream_exon_width / 2)
-            row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            row_canvas.create_text(text_start_x, text_start_y, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
-
-            # Prepare for next sample
-            row_number += 1
-
-        # Expand exon frame horizontally
-        self.exon_frame.columnconfigure(0, weight=1)
-
     def tag_button_clicked(self, sample_name, as_id, new_tag, up_button, down_button, uncertain_button):
         """
         Triggered when a tag button is clicked. Updates button styles and stores the new tag in the dataset.
@@ -2037,6 +1876,167 @@ class TINTagger(tk.Tk):
             # Update row index for next sample #
             ####################################
             row_number += 1
+
+    def draw_alternative_donor_events(self, data):
+        """
+        Draws alternative donor site events.
+        """
+
+        # Fill in samples information column
+        self.populate_samples_frame(data)
+
+        # Get strand information to know which way to draw exons
+        strand = data["strand"]
+
+        # Keep track of current row
+        row_number = 0
+
+        # First, draw a top frame containing exon names
+        exon_name_frame = ttk.Frame(self.exon_frame)
+        exon_name_frame.grid(column=0, row=row_number, sticky="NEWS")
+
+        row_number += 1
+
+        # Add upstream exon name
+        upstream_exon_name = data["samples"].values()[0]["exons"]["upstream_exon"]["exon_name"]
+        if len(upstream_exon_name) > 15:
+            upstream_exon_name = upstream_exon_name[:14] + ".."
+
+        upstream_label = ttk.Label(exon_name_frame, text=upstream_exon_name, font="tkDefaultFont 16", anchor=tk.E)
+        upstream_label.grid(column=0, row=0, sticky="NEWS")
+
+        # Add exon of interest name
+        exon_name = data["exons"]
+        if len(exon_name) > 15:
+            exon_name = exon_name[:14] + ".."
+        exon_of_interest_label = ttk.Label(exon_name_frame, text=exon_name, font="tkDefaultFont 16 bold", anchor=tk.CENTER)
+        exon_of_interest_label.grid(column=1, row=0, sticky="NEWS")
+
+        # Add downstream exon name
+        downstream_exon_name = data["samples"].values()[0]["exons"]["downstream_exon"]["exon_name"]
+        if len(downstream_exon_name) > 15:
+            downstream_exon_name = downstream_exon_name[:14] + ".."
+
+        downstream_label = ttk.Label(exon_name_frame, text=downstream_exon_name, font="tkDefaultFont 16", anchor=tk.W)
+        downstream_label.grid(column=2, row=0, sticky="NEWS")
+
+        # Finally, add even weight for all exon names
+        exon_name_frame.columnconfigure(0, weight=1)
+        exon_name_frame.columnconfigure(1, weight=1)
+        exon_name_frame.columnconfigure(2, weight=1)
+
+        ############################################
+        ################ Draw exons ################
+        ############################################
+
+        # Dimension variables
+        canvas_width = 300
+        canvas_height = 100
+        donor_site_width = (canvas_width / 3) * 2
+        upstream_exon_width = 60
+        main_exon_width = 30
+        downstream_exon_width = 60
+        exon_height = 80
+        exon_start_y = (canvas_height - exon_height) / 2
+
+        # Iterate samples
+        for sample_name in sorted(data["samples"].keys(), key=natural_sort_key):
+            sample_data = data["samples"][sample_name]
+
+            # Get sample exons
+            upstream_exon = sample_data["exons"]["upstream_exon"]
+            exon_of_interest = sample_data["exons"]["exon_of_interest"]
+            downstream_exon = sample_data["exons"]["downstream_exon"]
+
+            # Highlight background for sample of interest
+            canvas_background = COLOR_WHITE
+            if sample_name == data["sample_of_interest"]:
+                canvas_background = COLOR_SAMPLE_HIGHLIGHT
+
+            # Initialize canvas and grid it to this row in the exon frame
+            row_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=canvas_height)
+            row_canvas.grid(row=row_number, column=0, sticky="NEWS")
+
+            # Keep track of canvases uses
+            self.canvases.append(row_canvas)
+
+            # Set even weight for every row in the center frame
+            self.exon_frame.rowconfigure(row_number, weight=1)
+
+            ######################
+            # Draw upstream exon #
+            ######################
+            upstream_coverage = upstream_exon["coverage"]
+            max_coverage = data["max_upstream_exon_coverage"]
+            percent_of_max_coverage = (float(upstream_coverage) / float(max_coverage)) * 100
+
+            upstream_exon_start_x = (donor_site_width - upstream_exon_width) / 2
+
+            # Draw exon background
+            row_canvas.create_rectangle(upstream_exon_start_x, exon_start_y, upstream_exon_start_x + upstream_exon_width, exon_start_y + exon_height, fill=canvas_background)
+
+            # Draw exon fill
+            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
+            fill_end_y = exon_start_y + exon_height
+            row_canvas.create_rectangle(upstream_exon_start_x, fill_start_y, upstream_exon_start_x + upstream_exon_width, fill_end_y, fill=COLOR_BLUE, outline=COLOR_DARKBLUE)
+
+            # Draw coverage text
+            text_start_x = upstream_exon_start_x + (upstream_exon_width / 2)
+            text_start_y = exon_height - 10
+            row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(upstream_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            row_canvas.create_text(text_start_x, text_start_y, text=str(upstream_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+
+            ##################
+            # Draw main exon #
+            ##################
+            main_exon_coverage = exon_of_interest["coverage"]
+            main_exon_max_coverage = data["max_exon_of_interest_coverage"]
+            percent_of_max_coverage = (float(main_exon_coverage) / float(main_exon_max_coverage)) * 100
+
+            main_exon_start_x = upstream_exon_start_x + upstream_exon_width
+
+            border_width = 1
+            if sample_name == data["sample_of_interest"]:
+                border_width = 3
+
+            # Draw exon background
+            row_canvas.create_rectangle(main_exon_start_x, exon_start_y, main_exon_start_x + main_exon_width, exon_start_y + exon_height, fill=canvas_background, width=border_width)
+
+            # Draw exon fill
+            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
+            row_canvas.create_rectangle(main_exon_start_x, fill_start_y, main_exon_start_x + main_exon_width, fill_end_y, fill=COLOR_BLUE, outline=COLOR_DARKBLUE, width=border_width)
+
+            # Draw coverage text
+            text_start_x = main_exon_start_x + (main_exon_width / 2)
+            row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(main_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            row_canvas.create_text(text_start_x, text_start_y, text=str(main_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+
+            ########################
+            # Draw downstream exon #
+            ########################
+            downstream_exon_coverage = downstream_exon["coverage"]
+            downstream_exon_max_coverage = data["max_downstream_exon_coverage"]
+            percent_of_max_coverage = (float(downstream_exon_coverage) / float(downstream_exon_max_coverage)) * 100
+
+            downstream_exon_start_x = donor_site_width  # Not sure if this is right
+
+            # Draw exon background
+            row_canvas.create_rectangle(downstream_exon_start_x, exon_start_y, downstream_exon_start_x + downstream_exon_width, exon_start_y + exon_height, fill=canvas_background)
+
+            # Draw exon fill
+            fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
+            row_canvas.create_rectangle(downstream_exon_start_x, fill_start_y, downstream_exon_start_x + downstream_exon_width, fill_end_y, fill=COLOR_BLUE, outline=COLOR_DARKBLUE)
+
+            # Draw coverage text
+            text_start_x = downstream_exon_start_x + (downstream_exon_width / 2)
+            row_canvas.create_text(text_start_x + 1, text_start_y + 1, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            row_canvas.create_text(text_start_x, text_start_y, text=str(downstream_exon_coverage), font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+
+            # Prepare for next sample
+            row_number += 1
+
+        # Expand exon frame horizontally
+        self.exon_frame.columnconfigure(0, weight=1)
 
 
 if __name__ == "__main__":
