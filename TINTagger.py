@@ -24,7 +24,7 @@ from TINDataProcessor import TINDataProcessor
 # TODO: Text is huge on linux
 # TODO: Add menu item for changing tt.Style().theme_names()
 # TODO: Add feedback as text in the statusbar when connecting to DB and reading datasets. Blink/animate (non-static)
-# TODO: Resizing canvas.on_resize() should get text color programmatically.
+# TODO: Implement canvas-approach of drawing exon names on top for all splicing event drawing functions. (Pref. write a function to do this, as it's currently boilerplate)
 
 
 """
@@ -1153,9 +1153,6 @@ class TINTagger(tk.Tk):
     def save_file(self):
         print "Bleep, blop, saving file."
 
-    def draw_alternative_terminator_event(self, data):
-        pass
-
     def left_arrow_clicked(self, event):
         """
         Handles when left-arrowkey is clicked. Essentially just passes through to
@@ -2088,6 +2085,7 @@ class TINTagger(tk.Tk):
         """
         Draw alternative acceptor events
         """
+        # TODO: Fix spacing between exons.
 
         # Fill in samples information column
         self.populate_samples_frame(data)
@@ -2251,24 +2249,177 @@ class TINTagger(tk.Tk):
             # Prepare for next sample
             row_number += 1
 
-
-        # TEST: Draw exon name in top canvas
+        # Draw the names of the exons above the drawings
         exon_name_canvas.create_text(upstream_exon_text_start_x, top_canvas_height / 2, text="%s" % upstream_exon_name, fill=COLOR_EXON_NAME, font="tkDefaultFont 16")
-        # TEST: Draw exon name in top canvas
         exon_name_canvas.create_text(main_exon_text_start_x, top_canvas_height / 2, text=exon_name, fill=COLOR_EXON_NAME, font="tkDefaultFont 16")
-        # TEST: Draw exon name in top canvas
         exon_name_canvas.create_text(downstream_exon_text_start_x, top_canvas_height / 2, text=downstream_exon_name, fill=COLOR_EXON_NAME, font="tkDefaultFont 16")
-
 
         # Expand exon frame horizontally
         self.exon_frame.columnconfigure(0, weight=1)
 
+    def draw_alternative_terminator_event(self, data):
+        """
+        Draw alternative terminator events.
+        """
+        # Fill samples information column
+        self.populate_samples_frame(data)
 
+        # Keep track of current row
+        row_number = 0
 
+        # Dimensions variables
+        canvas_width = 300
+        canvas_height = 100
+        exon_height = 80
+        exon_width = 60
+        tail_offset_y = 10
+        tail_width = 20
+        canvas_background = COLOR_WHITE
+        top_canvas_height = 20
+        """
+        The following variables are coordinates for points in a polygon comprising the exon structure. Exon is drawn
+        by connecting lines between 8 points, drawn counter-clockwise beginning in the top-left corner:
+        
+        1 # # # # # # # # # # # # # # 8
+        #                             #
+        #                             7 # # # # # # # 6
+        #                                             #
+        #                                             #
+        #                                             #
+        #                                             #
+        #                             4 # # # # # # # 5
+        #                             #
+        2 # # # # # # # # # # # # # # 3
+        """
 
+        one_x, one_y = (canvas_width / 2) - (exon_width + tail_width) / 2, 0
+        two_x, two_y = one_x, one_y + exon_height
+        three_x, three_y = two_x + exon_width, two_y
+        four_x, four_y = three_x, three_y - tail_offset_y
+        five_x, five_y = four_x + tail_width, four_y
+        six_x, six_y = five_x, one_y + tail_offset_y
+        seven_x, seven_y = six_x - tail_width, six_y
+        eight_x, eight_y = seven_x, one_y
 
+        ###########################################
+        # Draw a top canvas containing exon names #
+        ###########################################
+        exon_name_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=top_canvas_height)
+        exon_name_canvas.grid(column=0, row=row_number, sticky="NEWS")
+        row_number += 1
 
+        # Get and trim exon of interest name
+        exon_name = data["exons"]
+        if len(exon_name) > 15:
+            exon_name = exon_name[:14] + ".."
 
+        # Get data
+        sample_names_sorted = sorted(data["samples"].keys(), key=natural_sort_key)
+        as_id = data["as_id"]
+        main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
+        main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
+
+        # Iterate and draw samples
+        for sample_name in sample_names_sorted:
+            #################
+            # Handle sample #
+            #################
+            sample_data = data["samples"][sample_name]
+            # Sample-specific variables
+            is_reported = sample_data["is_reported"]
+            sample_tag = sample_data["event_tag"]
+            # Setup colors
+            exon_color = COLOR_BLUE
+            exon_bordercolor = COLOR_DARKBLUE
+            canvas_background = COLOR_WHITE
+            # If event is not reported in sample, draw monochrome canvas
+            if not is_reported:
+                exon_color = COLOR_DARKGRAY
+                exon_bordercolor = COLOR_DARKGRAY
+            # Initialize canvas and grid it to this row in the exon frame
+            row_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=canvas_height)
+            row_canvas.grid(row=row_number, column=0, sticky="NEWS")
+            # Keep track of canvases used
+            self.canvases.append(row_canvas)
+            # Setup tagging buttons
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            # Set event weight for every row in the center frame
+            self.exon_frame.rowconfigure(row_number, weight=1)
+            # Add separator
+            row_number += 1
+            sep = tk.Frame(self.exon_frame, bg=COLOR_DARKWHITE, height=2)
+            sep.grid(row=row_number, column=0, sticky="NEWS")
+            button_sep = tk.Frame(self.exon_frame, bg=COLOR_DARKWHITE, height=2)
+            button_sep.grid(row=row_number, column=1, sticky="NEWS")
+
+            ##################
+            # Draw main exon #
+            ##################
+            row_canvas.create_polygon(
+                [
+                    one_x, one_y,
+                    two_x, two_y,
+                    three_x, three_y,
+                    four_x, four_y,
+                    five_x, five_y,
+                    six_x, six_y,
+                    seven_x, seven_y,
+                    eight_x, eight_y,
+                    one_x, one_y
+                ],
+                fill=canvas_background,
+                outline=exon_bordercolor
+            )
+
+            # Get RPKM values
+            sample_rpkm_data = main_exon_rpkm_data[sample_name]
+            combined_rpkm = sample_rpkm_data["combined_rpkm"]
+            max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+
+            # Calc fill Y position
+            fill_start_y = (one_y + two_y) - (int((percent_of_max_rpkm / 100) * exon_height))
+
+            # Draw fill
+            fill_polygons = [
+                one_x, fill_start_y,
+                two_x, two_y,
+                three_x, three_y
+            ]
+            if (exon_height - fill_start_y) < (exon_height - four_y):
+                fill_polygons += [four_x, fill_start_y]
+            elif (exon_height - fill_start_y) < (exon_height - six_y):
+                fill_polygons += [four_x, four_y, five_x, five_y, six_x, fill_start_y]
+            else:
+                fill_polygons += [four_x, four_y, five_x, five_y, six_x, six_y, seven_x, seven_y, eight_x, fill_start_y]
+            # Lastly, add a line back to the first point
+            fill_polygons += [one_x, fill_start_y]
+            row_canvas.create_polygon(fill_polygons, fill=exon_color, outline=exon_bordercolor)
+
+            # Draw RPKM text
+            main_exon_text_start_x = one_x + (exon_width / 2)
+            main_exon_text_start_y = two_y - 10
+            row_canvas.create_text(main_exon_text_start_x + 1, main_exon_text_start_y + 1, text="%.1f" % combined_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            row_canvas.create_text(main_exon_text_start_x, main_exon_text_start_y, text="%.1f" % combined_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
+
+            # Get PSI values
+            if main_exon_psi_data[sample_name]["is_reported"]:
+                sample_psi_data = main_exon_psi_data[sample_name]
+                sample_psi = sample_psi_data["psi"]
+                sample_included_counts = sample_psi_data["included_counts"]
+                sample_excluded_counts = sample_psi_data["excluded_counts"]
+                psi_text_start_y = main_exon_text_start_y - 30
+                psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
+                row_canvas.create_text(main_exon_text_start_x + 1, psi_text_start_y + 1, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+                row_canvas.create_text(main_exon_text_start_x, psi_text_start_y, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
+
+        # Draw the name of the exon in the top canvas
+        if len(sample_names_sorted) > 0:
+            # TODO: Do this check in every draw-function
+            exon_name_canvas.create_text(main_exon_text_start_x, top_canvas_height / 2, text=exon_name, fill=COLOR_EXON_NAME, font="tkDefaultFont 16")
+
+        # Expand exon frame horizontally
+        self.exon_frame.columnconfigure(0, weight=1)
 
 
 

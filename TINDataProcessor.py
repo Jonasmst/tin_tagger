@@ -74,7 +74,7 @@ class TINDataProcessor(object):
         df.exon2 = df.exon2.str.replace("\.0$", "")
 
         # TODO: Don't do this; return full dataset
-        df = df.loc[df.splice_type == "AA"]
+        df = df.loc[df.splice_type == "AT"]
 
         # Count occurrences if not already done
         if "occurrences" not in list(df.columns):
@@ -598,13 +598,25 @@ class TINDataProcessor(object):
         print "AS_ID:", as_id
         print "Exon name:", exons
         print "Prev exon name:", prev_exon_name
-        print "Prev exon ID:", int(prev_exon_id)
+        try:
+            print "Prev exon ID:", int(prev_exon_id)
+            print "Next exon ID:", int(next_exon_id)
+        except ValueError:
+            print "Prev exon ID:", prev_exon_id
+            print "Next exon ID:", next_exon_id
         print "Next exon name:", next_exon_name
-        print "Next exon ID:", int(next_exon_id)
         print "-------------------------------"
 
         # Create coordinates from chr, start and stop
         coordinates = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
+
+        # Try int-casting exon IDs
+        try:
+            prev_exon_id = int(prev_exon_id)
+            next_exon_id = int(next_exon_id)
+        except ValueError:
+            # Don't do anything.
+            pass
 
         # General row data
         row_data = {
@@ -614,8 +626,8 @@ class TINDataProcessor(object):
             "exons": exons,
             "strand": strand,
             "as_id": as_id,
-            "prev_exon_id": int(prev_exon_id),
-            "next_exon_id": int(next_exon_id),
+            "prev_exon_id": prev_exon_id,
+            "next_exon_id": next_exon_id,
             "prev_exon_name": prev_exon_name,
             "next_exon_name": next_exon_name,
         }
