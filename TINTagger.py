@@ -1655,8 +1655,6 @@ class TINTagger(tk.Tk):
         # Dimension variables
         canvas_width = 300
         canvas_height = 100
-        # exon_width = 60
-        # intron_width = exon_width * 2
 
         intron_container_width = canvas_width / 2
         exon_container_width = canvas_width / 4
@@ -1669,14 +1667,9 @@ class TINTagger(tk.Tk):
         downstream_exon_start_x = intron_stop_x
         downstream_exon_stop_x = downstream_exon_start_x + exon_width
 
-
-        #exon_to_intron_distance = (exon_container_width - exon_width) / 2
-
-        #width_per_exon_container = canvas_width / 3
         exon_height = 80
         exon_start_y = (canvas_height - exon_height) / 2
         intron_height = 5
-        intron_start_y = (canvas_height - intron_height) / 2
 
         # Get data for this event
         sample_names_sorted = sorted(data["samples"].keys(), key=natural_sort_key)
@@ -1736,7 +1729,6 @@ class TINTagger(tk.Tk):
                 upstream_exon_start_x,
                 exon_start_y,
                 upstream_exon_stop_x,
-                #upstream_exon_start_x + exon_width,
                 exon_start_y + exon_height,
                 fill=canvas_background
             )
@@ -1836,11 +1828,6 @@ class TINTagger(tk.Tk):
                 sample_included_counts = sample_psi_data["included_counts"]
                 sample_excluded_counts = sample_psi_data["excluded_counts"]
 
-
-            #intron_coverage = intron["coverage"]
-            #intron_max_coverage = data["max_exon_of_interest_coverage"]
-            #percent_of_max_coverage = (float(intron_coverage) / float(intron_max_coverage)) * 100
-
             intron_start_x = upstream_exon_start_x + exon_width
             # Draw intron coverage fill
             fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_rpkm/100) * exon_height))
@@ -1871,6 +1858,12 @@ class TINTagger(tk.Tk):
                 font="tkDefaultFont 16",
                 fill=COLOR_CANVAS_TEXT,
             )
+
+            # Draw PSI for main exon (retained intron)
+            if main_exon_psi_data[sample_name]["is_reported"]:
+                psi_text_start_y = exon_start_y
+                psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
+                row_canvas.create_text(text_start_x, psi_text_start_y, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
 
             ####################################
             # Update row index for next sample #
