@@ -1176,7 +1176,7 @@ class TINTagger(tk.Tk):
         Handles next-button presses: Update row index and initiate reading of new row.
         """
         self.current_row_index += 1
-        if self.current_row_index > len(self.dataset):
+        if self.current_row_index >= len(self.dataset):
             print "Wops, no more rows (reached end of dataset)"
             self.current_row_index -= 1
             self.set_statusbar_text("Reached end of dataset.")
