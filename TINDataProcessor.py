@@ -664,6 +664,96 @@ class TINDataProcessor(object):
 
         return row_data
 
+    def get_rpkm_for_mutually_exclusive_exons(self, sample_names, as_id):
+        """
+        Finds rpkm-values for exons affected by a mutually exclusive exons (ME) event. If multiple exons present on one
+        or both of the mutually exclusive exons, returns the combined RPKM of all (partial) exons. E.g., for the event
+        "4\5.1:5.2", returns the RPKM for exon 4 and the combined RPKM for exon 5.1 + 5.2. Returned dictionary takes
+        the form:
+        {
+           <sample_name>: {
+                "first_exon": {
+                    "joined_exon_name": <Name as reported by SpliceSeq, e.g. "5.1:5.2", or "4">,
+                    "combined_rpkm": <Combined RPKM value of all exons comprising the first part of the ME event>
+                },
+                "second_exon": {
+                    "joined_exon_name": <Same as for 'first_exon'>,
+                    "combined_rpkm": <Same as for 'first_exon'>
+                }
+           },
+           ...
+        }
+        """
+
+        # Query the SpliceSeq DB
+        query = """
+        SELECT
+            s.name,
+            s.sample_id,
+            ar.exons,
+            are.as_id,
+            are.exon_id,
+            e.exon_name,
+            ec.tot_reads,
+            ec.rpkm
+        FROM sample AS s
+        INNER JOIN exon_count AS ec
+            ON s.sample_id=ec.sample_id
+        INNER JOIN as_ref_exon AS are
+            ON ec.exon_id=are.exon_id
+        INNER JOIN exon AS e
+            ON e.exon_id=are.exon_id
+        INNER JOIN as_ref AS ar
+            ON ar.as_id=are.as_id
+        WHERE
+            are.as_id=%d
+            AND
+            s.name IN(%s)
+        """ % (as_id, ", ".join('"' + s + '"' for s in sample_names))
+
+        # Read results into Pandas DataFrame
+        df = pd.read_sql_query(query, self.db)
+
+        # In ME events, there are always two main exons, first and second
+        # TODO: Handle possibility of result being empty DF
+        affected_exons = df["exons"].iloc[0]
+        first_main_exons, second_main_exons = affected_exons.split("|")  # Both may contain partials, e.g.: "5.1:5.2"
+
+        # Get all exons in first and second main exons (if multiple partial exons)
+        all_first_main_exons = first_main_exons.split(":")  # Split into a list, e.g. ["5.1", "5.2"]
+        all_second_main_exons = second_main_exons.split(":")  # Split into a list, e.g. ["5.1", "5.2"]
+
+        # Grab RPKM values for the different exons for each sample
+        return_data = {}
+        for sample_name in sample_names:
+            # TODO: Handle the possibility of this not being reported for every sample
+            # Allocate an entry for this sample in the return data
+            return_data[sample_name] = {}
+            if sample_name not in list(df["name"].unique()):
+                # Sample not reported
+                return_data[sample_name]["is_reported"] = False
+                # Move on to next sample
+                continue
+            return_data[sample_name]["is_reported"] = True
+            # Get data for this sample
+            sample_data = df.loc[df["name"] == sample_name]
+            # Get RPKM values for both main exons
+            first_exons_data = sample_data.loc[sample_data["exon_name"].isin(all_first_main_exons)]
+            return_data[sample_name]["first_exon"] = {
+                "joined_exon_name": ":".join(all_first_main_exons),
+                "combined_rpkm": first_exons_data["rpkm"].sum()
+            }
+            # Do the same for the second main exon
+            second_exon_data = sample_data.loc[sample_data["exon_name"].isin(all_second_main_exons)]
+            return_data[sample_name]["second_exon"] = {
+                "joined_exon_name": ":".join(all_second_main_exons),
+                "combined_rpkm": second_exon_data["rpkm"].sum()
+            }
+
+        # Finally, return the data
+        return return_data
+
+
 
 
 
