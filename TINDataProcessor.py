@@ -74,7 +74,8 @@ class TINDataProcessor(object):
         df.exon2 = df.exon2.str.replace("\.0$", "")
 
         # TODO: Don't do this; return full dataset
-        df = df.loc[df.splice_type == "AP"]
+        df = df.loc[df.splice_type == "ME"]
+        print "Length of dataset:", len(df)
 
         # Count occurrences if not already done
         if "occurrences" not in list(df.columns):
@@ -430,8 +431,8 @@ class TINDataProcessor(object):
                 results_dict[sample_name]["exons"][exon_id]["max_rpkm"] = max_rpkms[exon_id]
                 results_dict[sample_name]["exons"][exon_id]["tot_reads"] = exon_df["tot_reads"].iloc[0]
 
-        print "Main exon RPKM query resulting dictionary:"
-        print json.dumps(results_dict, indent=4)
+        #print "Main exon RPKM query resulting dictionary:"
+        #print json.dumps(results_dict, indent=4)
 
         return results_dict
 
@@ -566,6 +567,8 @@ class TINDataProcessor(object):
         # TODO: Find included_counts and excluded_counts for other exons than the one in question
 
         # Get information
+        print "Length dataset:", len(dataset)
+        print "Current row index:", current_row_index
         splice_type = dataset.iloc[current_row_index]["splice_type"]
         sample_name = dataset.iloc[current_row_index]["name"]
         as_id = dataset.iloc[current_row_index]["as_id"]
@@ -684,7 +687,6 @@ class TINDataProcessor(object):
            ...
         }
         """
-
         # Query the SpliceSeq DB
         query = """
         SELECT
@@ -711,8 +713,22 @@ class TINDataProcessor(object):
             s.name IN(%s)
         """ % (as_id, ", ".join('"' + s + '"' for s in sample_names))
 
-        # Read results into Pandas DataFrame
-        df = pd.read_sql_query(query, self.db)
+        # TODO: Handle some samples not being reported for
+        if self.testing:
+            sample_names = ["sample%s" % str(x) for x in range(1, 11)]
+            df = pd.DataFrame({
+                "name": sample_names * 3,
+                "sample_id": [3, 4, 7, 8, 9, 10, 11, 12, 13, 14] * 3,
+                "exons": ["5|6.1:6.2"] * 30,
+                "as_id": [46834] * 30,
+                "exon_id": [169331] * 10 + [169332] * 10 + [169333] * 10,
+                "exon_name": ["5"] * 10 + ["6.1"] * 10 + ["6.2"] * 10,
+                "tot_reads": random.sample(range(0, 100), 30),
+                "rpkm": random.sample(range(200, 1000), 30)
+            })
+        else:
+            # Read results into Pandas DataFrame
+            df = pd.read_sql_query(query, self.db)
 
         # In ME events, there are always two main exons, first and second
         # TODO: Handle possibility of result being empty DF
@@ -749,6 +765,23 @@ class TINDataProcessor(object):
                 "joined_exon_name": ":".join(all_second_main_exons),
                 "combined_rpkm": second_exon_data["rpkm"].sum()
             }
+
+        # Find max RPKM for first and second main exons
+        all_first_exon_rpkms = []
+        all_second_exon_rpkms = []
+        for sample_name in sample_names:
+            if return_data[sample_name]["is_reported"]:
+                all_first_exon_rpkms.append(return_data[sample_name]["first_exon"]["combined_rpkm"])
+                all_second_exon_rpkms.append(return_data[sample_name]["second_exon"]["combined_rpkm"])
+
+        max_first_exon_rpkm = max(all_first_exon_rpkms)
+        max_second_exon_rpkm = max(all_second_exon_rpkms)
+
+        # Add max values to all samples' return data
+        for sample_name in sample_names:
+            if return_data[sample_name]["is_reported"]:
+                return_data[sample_name]["first_exon"]["max_combined_rpkm"] = max_first_exon_rpkm
+                return_data[sample_name]["second_exon"]["max_combined_rpkm"] = max_second_exon_rpkm
 
         # Finally, return the data
         return return_data

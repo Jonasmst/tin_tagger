@@ -1125,6 +1125,8 @@ class TINTagger(tk.Tk):
             self.draw_alternative_acceptor_events(data)
         elif splice_type == "AP":
             self.draw_alternative_promotor_event(data)
+        elif splice_type == "ME":
+            self.draw_mutually_exclusive_exons_event(data)
 
         # Reset cursor now that we're done with loading everything
         self.config(cursor="")
@@ -2584,7 +2586,178 @@ class TINTagger(tk.Tk):
         # Expand exon frame horizontally
         self.exon_frame.columnconfigure(0, weight=1)
 
+    def draw_mutually_exclusive_exons_event(self, data):
+        """
+        Draws mutually exclusive exons events.
+        """
+        # Fill samples information column
+        self.populate_samples_frame(data)
 
+        # Keep track of current row
+        row_number = 0
+
+        # Dimension variables
+        canvas_width = 300
+        canvas_height = 100
+        exon_height = 60
+        exon_width = 60
+        canvas_background = COLOR_WHITE
+        top_canvas_height = 20
+        exon_start_y = (canvas_height - exon_height) / 2
+        canvas_per_exon = canvas_width / 4
+        exon_padding = (canvas_per_exon - exon_width) / 2
+        text_start_y = exon_height - 1
+
+        #########################################
+        # Draw top canvas containing exon names #
+        #########################################
+        exon_name_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=top_canvas_height)
+        exon_name_canvas.grid(column=0, row=row_number, sticky="NEWS")
+        row_number += 1
+
+        # Get and trim exon of interest name
+        exon_name = data["exons"]
+        if len(exon_name) > 15:
+            exon_name = exon_name[:14] + ".."
+        # Get and trim upstream exon name
+        upstream_exon_name = data["prev_exon_name"]
+        if len(upstream_exon_name) > 15:
+            upstream_exon_name = upstream_exon_name[:14] + ".."
+        # Get and trim downstream exon name
+        downstream_exon_name = data["next_exon_name"]
+        if len(downstream_exon_name) > 15:
+            downstream_exon_name = downstream_exon_name[:14] + [".."]
+
+        # Get data
+        sample_names_sorted = sorted(data["samples"].keys(), key=natural_sort_key)
+        as_id = data["as_id"]
+        prev_exon_id = data["prev_exon_id"]
+        next_exon_id = data["next_exon_id"]
+        # Get expression values for flanking exons and main exons
+        flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
+        main_exon_rpkm_data = self.data_processor.get_rpkm_for_mutually_exclusive_exons(sample_names_sorted, as_id)
+        main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
+
+        ##################################
+        # Iterate samples and draw exons #
+        ##################################
+        for sample_name in sample_names_sorted:
+            sample_data = data["samples"][sample_name]
+            # Sample-specific variables
+            is_reported = sample_data["is_reported"]
+            sample_tag = sample_data["event_tag"]
+            # Setup colors
+            exon_color = COLOR_BLUE
+            exon_bordercolor = COLOR_DARKBLUE
+            canvas_background = COLOR_WHITE
+            # If event is not reported in sample, draw monochrome canvas
+            if not is_reported:
+                exon_color = COLOR_DARKGRAY
+                exon_bordercolor = COLOR_DARKGRAY
+            # Initialize canvas and grid it to this row in the exon frame
+            row_canvas = ResizingCanvas(self.exon_frame, bg=canvas_background, highlightthickness=0, width=canvas_width, height=canvas_height)
+            row_canvas.grid(row=row_number, column=0, sticky="NEWS")
+            # Keep track of canvases used
+            self.canvases.append(row_canvas)
+            # Setup tagging buttons
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            # Set event weight for every row in the center frame
+            self.exon_frame.rowconfigure(row_number, weight=1)
+            # Add separator
+            row_number += 1
+            sep = tk.Frame(self.exon_frame, bg=COLOR_DARKWHITE, height=2)
+            sep.grid(row=row_number, column=0, sticky="NEWS")
+            button_sep = tk.Frame(self.exon_frame, bg=COLOR_DARKWHITE, height=2)
+            button_sep.grid(row=row_number, column=1, sticky="NEWS")
+
+            ######################
+            # Draw upstream exon #
+            ######################
+            upstream_exon_start_x = exon_padding
+            upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
+            upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            upstream_percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
+            # Draw exon background
+            row_canvas.create_rectangle(upstream_exon_start_x, exon_start_y, upstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
+            fill_start_y = (exon_start_y + exon_height) - (int((upstream_percent_of_max_rpkm / 100) * exon_height))
+            fill_end_y = exon_start_y + exon_height
+            # Draw exon fill
+            row_canvas.create_rectangle(upstream_exon_start_x, fill_start_y, upstream_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor)
+            # Draw exon RPKM values
+            upstream_exon_text_start_x = upstream_exon_start_x + (exon_width / 2)
+            row_canvas.create_text(upstream_exon_text_start_x + 1, text_start_y + 1, text="%.1f" % upstream_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            row_canvas.create_text(upstream_exon_text_start_x, text_start_y, text="%.1f" % upstream_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
+
+            ########################
+            # Draw first main exon #
+            ########################
+            # Get combined RPKM for first exon(s)
+            first_main_exon_rpkm = main_exon_rpkm_data[sample_name]["first_exon"]["combined_rpkm"]
+            first_main_exon_max_rpkm = main_exon_rpkm_data[sample_name]["first_exon"]["max_combined_rpkm"]
+            first_main_exon_percent_of_max_rpkm = (float(first_main_exon_rpkm) / float(first_main_exon_max_rpkm)) * 100
+            first_main_exon_name = main_exon_rpkm_data[sample_name]["first_exon"]["joined_exon_name"]
+            # Draw exon background
+            first_main_exon_start_x = upstream_exon_start_x + exon_width + (exon_padding * 2)
+            first_main_exon_end_x = first_main_exon_start_x + exon_width
+            row_canvas.create_rectangle(first_main_exon_start_x, exon_start_y, first_main_exon_end_x, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
+            # Draw exon fill
+            first_main_exon_fill_start_y = (exon_start_y + exon_height) - (int((first_main_exon_percent_of_max_rpkm / 100) * exon_height))
+            first_main_exon_fill_end_y = exon_start_y + exon_height
+            row_canvas.create_rectangle(first_main_exon_start_x, first_main_exon_fill_start_y, first_main_exon_end_x, first_main_exon_fill_end_y, fill=exon_color, outline=exon_bordercolor)
+            # Draw exon RPKM values
+            first_main_exon_text_start_x = first_main_exon_start_x + (exon_width / 2)
+            row_canvas.create_text(first_main_exon_text_start_x + 1, text_start_y + 1, text="%.1f" % first_main_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            row_canvas.create_text(first_main_exon_text_start_x, text_start_y, text="%.1f" % first_main_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
+
+            #########################
+            # Draw second main exon #
+            #########################
+            # Get combined RPKM for second exon(s)
+            second_main_exon_rpkm = main_exon_rpkm_data[sample_name]["second_exon"]["combined_rpkm"]
+            second_main_exon_max_rpkm = main_exon_rpkm_data[sample_name]["second_exon"]["max_combined_rpkm"]
+            second_main_exon_percent_of_max_rpkm = (float(second_main_exon_rpkm) / float(second_main_exon_max_rpkm)) * 100
+            second_main_exon_name = main_exon_rpkm_data[sample_name]["second_exon"]["joined_exon_name"]
+            # Draw exon background
+            second_main_exon_start_x = first_main_exon_start_x + exon_width + (exon_padding * 2)
+            second_main_exon_end_x = second_main_exon_start_x + exon_width
+            row_canvas.create_rectangle(second_main_exon_start_x, exon_start_y, second_main_exon_end_x, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
+            # Draw exon fill
+            second_main_exon_fill_start_y = (exon_start_y + exon_height) - (int((second_main_exon_percent_of_max_rpkm / 100) * exon_height))
+            second_main_exon_fill_end_y = exon_start_y + exon_height
+            row_canvas.create_rectangle(second_main_exon_start_x, second_main_exon_fill_start_y, second_main_exon_end_x, second_main_exon_fill_end_y, fill=exon_color, outline=exon_bordercolor)
+            # Draw exon RPKM values
+            second_main_exon_text_start_x = second_main_exon_start_x + (exon_width / 2)
+            row_canvas.create_text(second_main_exon_text_start_x + 1, text_start_y + 1, text="%.1f" % second_main_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            row_canvas.create_text(second_main_exon_text_start_x, text_start_y, text="%.1f" % second_main_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
+
+            ########################
+            # Draw downstream exon #
+            ########################
+            downstream_exon_start_x = second_main_exon_end_x + (exon_padding * 2)
+            downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
+            downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            downstream_percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            # Draw exon background
+            row_canvas.create_rectangle(downstream_exon_start_x, exon_start_y, downstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
+            fill_start_y = (exon_start_y + exon_height) - (int((downstream_percent_of_max_rpkm / 100) * exon_height))
+            fill_end_y = exon_start_y + exon_height
+            # Draw exon fill
+            row_canvas.create_rectangle(downstream_exon_start_x, fill_start_y, downstream_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor)
+            # Draw exon RPKM values
+            downstream_exon_text_start_x = downstream_exon_start_x + (exon_width / 2)
+            row_canvas.create_text(downstream_exon_text_start_x + 1, text_start_y + 1, text="%.1f" % downstream_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
+            row_canvas.create_text(downstream_exon_text_start_x, text_start_y, text="%.1f" % downstream_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
+
+        # Draw the names of the exons above the drawings
+        exon_name_canvas.create_text(upstream_exon_text_start_x, top_canvas_height / 2, text=upstream_exon_name, fill=COLOR_EXON_NAME, font="tkDefaultFont")
+        exon_name_canvas.create_text(first_main_exon_text_start_x, top_canvas_height / 2, text=first_main_exon_name, fill=COLOR_EXON_NAME, font="tkDefaultFont")
+        exon_name_canvas.create_text(second_main_exon_text_start_x, top_canvas_height / 2, text=second_main_exon_name, fill=COLOR_EXON_NAME, font="tkDefaultFont")
+        exon_name_canvas.create_text(downstream_exon_text_start_x, top_canvas_height / 2, text=downstream_exon_name, fill=COLOR_EXON_NAME, font="tkDefaultFont")
+
+
+
+        # Expand exon frame horizontally
+        self.exon_frame.columnconfigure(0, weight=1)
 
 if __name__ == "__main__":
     # Create and run app
