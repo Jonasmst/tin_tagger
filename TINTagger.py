@@ -878,7 +878,8 @@ class TINTagger(tk.Tk):
         try:
             if not filtered_dataset.empty:
                 self.dataset = filtered_dataset
-                self.current_asid = 0  # TODO: 0 isn't necessesarily a valid as_id
+                self.all_asids = sorted(list(self.dataset["as_id"].unique()))
+                self.current_asid = self.all_asids[0]
                 self.update_information()
         except AttributeError as e:
             print "ERROR: Empty dataset after filtering: %s" % e.message
