@@ -14,17 +14,10 @@ from TINDataProcessor import TINDataProcessor
 # TODO: Cache rows so we don't need to run samtools etc when pressing previous-button
 # TODO: Find PSI, included counts, excluded counts for other exons and display if it's available (gonna be an sql-call).
 # TODO: Pre-fetch a number of rows in the background (e.g. fetch samtools-coverage/spliceseq DB-stuff for e.g. 100 rows)
-# TODO: Draw stepped coverage-indicator (as in IGV) for every region reported by samtools and not only display the average (can draw over the exons, e.g.)
-# TODO: Since we're now displaying and tagging all samples, a per-row approach doesn't make sense anymore. Should be based on as_id so we don't display duplicates that have already been tagged.
 # TODO: Instead of highlighting the sample canvas, we should highlight the exon column (not the unreported ones, though).
-# TODO: Normalize counts for sequencing depth (can I use the RPKM? No! The gene may not be expressed, which has nothing to do with seq. depth): SpliceSeqDB has sample.alignedReads that I can use.
-# TODO: Use SpliceSeqDB.exon_counts.rpkm instead of SAMtools depth -r? Or in addition?
 # TODO: Sort dataset by gene, then "exons" to show similar events after each other?
-# TODO: Wait -> Watch for TK Cursors
 # TODO: Text is huge on linux
-# TODO: Add menu item for changing tt.Style().theme_names()
 # TODO: Add feedback as text in the statusbar when connecting to DB and reading datasets. Blink/animate (non-static)
-# TODO: Implement canvas-approach of drawing exon names on top for all splicing event drawing functions. (Pref. write a function to do this, as it's currently boilerplate)
 
 
 """
@@ -166,8 +159,8 @@ class TINTagger(tk.Tk):
         # Names of all samples in the dataset
         self.sample_names = []
 
-        # Start on row 0 by default
-        self.current_row_index = 0
+        # Start on first asid. # TODO: 0 is not necessarily a valid as_id
+        self.current_asid = 0
 
         # Mapping exon skipping abbreviations to full text
         self.splice_type_map = {
@@ -866,7 +859,7 @@ class TINTagger(tk.Tk):
     def apply_filters(self, filters=None):
         """
         Applies the currently active filter. Calls the TINDataProcessor to return a filtered dataset and updates
-        self.dataset to reflect the changes. Also resets the self.current_row_index to 0. Finally, calls
+        self.dataset to reflect the changes. Also resets the self.current_asid to 0. Finally, calls
         self.update_information() to update the UI.
         """
 
@@ -885,7 +878,7 @@ class TINTagger(tk.Tk):
         try:
             if not filtered_dataset.empty:
                 self.dataset = filtered_dataset
-                self.current_row_index = 0
+                self.current_asid = 0  # TODO: 0 isn't necessesarily a valid as_id
                 self.update_information()
         except AttributeError as e:
             print "ERROR: Empty dataset after filtering: %s" % e.message
@@ -1025,13 +1018,13 @@ class TINTagger(tk.Tk):
         self.config(cursor="watch")
 
         # Get dataset
-        self.dataset = self.data_processor.load_dataset(filepath)
+        self.dataset, self.all_asids = self.data_processor.load_dataset(filepath)
 
         # Find and store unique sample names
         self.sample_names = list(self.dataset["name"].unique())
 
-        # Default to the first line of the file
-        self.current_row_index = 0
+        # Default to the first as_id in the file
+        self.current_asid = self.all_asids[0]
 
         # Handle data
         self.update_information()
@@ -1088,13 +1081,13 @@ class TINTagger(tk.Tk):
             return
 
         # Display which event we're at in the statusbar
-        self.set_statusbar_text("Splicing event %d/%d" % (self.current_row_index + 1, len(self.dataset)))
+        self.set_statusbar_text("Splicing event %d/%d" % (self.all_asids.index(self.current_asid) + 1, len(self.all_asids)))
 
         # Update tagging progress information in statusbar
         self.update_tag_information()
 
         # Get data for this row
-        data = self.data_processor.get_row_data(self.current_row_index, self.dataset, self.sample_names, self.bam_paths, self.testing)
+        data = self.data_processor.get_row_data(self.current_asid, self.dataset, self.sample_names, self.bam_paths, self.testing)
 
         # Populate the sidebar with general information
         self.asid_text["text"] = data["as_id"]
@@ -1173,27 +1166,28 @@ class TINTagger(tk.Tk):
 
     def next_button_clicked(self):
         """
-        Handles next-button presses: Update row index and initiate reading of new row.
+        Handles next-button presses: Update as_id and initiate reading of new row.
         """
-        self.current_row_index += 1
-        if self.current_row_index >= len(self.dataset):
-            print "Wops, no more rows (reached end of dataset)"
-            self.current_row_index -= 1
+        next_asid_index = self.all_asids.index(self.current_asid) + 1
+        if next_asid_index <= len(self.all_asids):
+            print "Woops, no more rows (reached end of dataset)"
+            next_asid_index -= 1
             self.set_statusbar_text("Reached end of dataset.")
         else:
+            self.current_asid = self.all_asids[next_asid_index]
             self.update_information()
 
     def previous_button_clicked(self):
         """
-        Handles previous-button presses: Update row index and initiate reading of new row.
+        Handles previous-button presses: Update as_id and initiate reading of new row.
         """
 
-        self.current_row_index -= 1
-        if self.current_row_index < 0:
+        previous_asid_index = self.all_asids.index(self.current_asid) - 1
+        if previous_asid_index < 0:
             print "Wops, no more rows (reached start of dataset)"
-            self.current_row_index += 1
-            self.set_statusbar_text("Reached beginning of dataset.")
+            self.set_statusbar_text("Reached begnning of dataset.")
         else:
+            self.current_asid = self.all_asids[previous_asid_index]
             self.update_information()
 
     def random_button_clicked(self):
@@ -1201,7 +1195,13 @@ class TINTagger(tk.Tk):
         Handles random-button presses: Pick and display a random event.
         """
 
-        self.current_row_index = random.randint(0, len(self.dataset))
+        random_asid = random.choice(self.all_asids)
+        if random_asid == self.current_asid:
+            # If the randomly chosen event is the same as it was before, just do nothing instead of loading everything
+            # again. Also, be careful with the while-loops; it may be only 1 unique as_id in the dataset.
+            return
+
+        self.current_asid = random_asid
         self.update_information()
 
     def print_test(self, text):

@@ -85,7 +85,10 @@ class TINDataProcessor(object):
         if "event_tag" not in list(df.columns):
             df["event_tag"] = TAG_NO_TAG  # Default to no tag
 
-        return df
+        # Find the first and last as_id
+        all_as_ids = sorted(list(df["as_id"].unique()))
+
+        return df, all_as_ids
 
     def filter_dataset(self, dataset, filters):
         """
@@ -536,7 +539,7 @@ class TINDataProcessor(object):
 
         return results_dict
 
-    def get_row_data(self, current_row_index, dataset, sample_names, bam_paths, testing):
+    def get_row_data(self, as_id, dataset, sample_names, bam_paths, testing):
         """
         Returns formatted data for the current row index.
         The format is as follows:
@@ -567,48 +570,21 @@ class TINDataProcessor(object):
         # TODO: Find included_counts and excluded_counts for other exons than the one in question
 
         # Get information
-        print "Length dataset:", len(dataset)
-        print "Current row index:", current_row_index
-        splice_type = dataset.iloc[current_row_index]["splice_type"]
-        sample_name = dataset.iloc[current_row_index]["name"]
-        as_id = dataset.iloc[current_row_index]["as_id"]
-        psi = dataset.iloc[current_row_index]["psi"]
-        gene_symbol = dataset.iloc[current_row_index]["symbol"]
-        strand = dataset.iloc[current_row_index]["strand"]
-        exons = dataset.iloc[current_row_index]["exons"]
-        chrom = dataset.iloc[current_row_index]["chr"]
-        splice_start = dataset.iloc[current_row_index]["first_exon_start"]
-        splice_stop = dataset.iloc[current_row_index]["last_exon_stop"]
-        prev_exon_start = dataset.iloc[current_row_index]["prev_exon_start"]  # NaN for AT/AP
-        prev_exon_stop = dataset.iloc[current_row_index]["prev_exon_stop"]  # NaN for AT/AP
-        next_exon_start = dataset.iloc[current_row_index]["next_exon_start"]  # NaN for AT/AP
-        next_exon_stop = dataset.iloc[current_row_index]["next_exon_stop"]  # NaN for AT/AP
-        # Handle negative strand start- and stop- coordinates
+        event_df = dataset.loc[dataset["as_id"] == as_id].iloc[0]  # Only need first row, really
+        splice_type = event_df["splice_type"]
+        gene_symbol = event_df["symbol"]
+        strand = event_df["strand"]
+        exons = event_df["exons"]
+        chrom = event_df["chr"]
+        splice_start = event_df["first_exon_start"]
+        splice_stop = event_df["last_exon_stop"]
         if strand == "-":
-            splice_start = dataset.iloc[current_row_index]["last_exon_stop"]  # NaN for AT/AP
-            splice_stop = dataset.iloc[current_row_index]["first_exon_start"]  # NaN for AT/AP
-            prev_exon_start = dataset.iloc[current_row_index]["prev_exon_stop"]  # NaN for AT/AP
-            prev_exon_stop = dataset.iloc[current_row_index]["prev_exon_start"]  # NaN for AT/AP
-            next_exon_start = dataset.iloc[current_row_index]["next_exon_stop"]  # NaN for AT/AP
-            next_exon_stop = dataset.iloc[current_row_index]["next_exon_start"]  # NaN for AT/AP
-        included_counts = dataset.iloc[current_row_index]["included_counts"]
-        excluded_counts = dataset.iloc[current_row_index]["excluded_counts"]
-        prev_exon_name = dataset.iloc[current_row_index]["exon1"]  # NaN for AT/AP
-        next_exon_name = dataset.iloc[current_row_index]["exon2"]  # NaN for AT/AP
-        prev_exon_id = dataset.iloc[current_row_index]["start_ex"]  # NaN for AT/AP
-        next_exon_id = dataset.iloc[current_row_index]["end_ex"]  # NaN for AT/AP
-
-        print "AS_ID:", as_id
-        print "Exon name:", exons
-        print "Prev exon name:", prev_exon_name
-        try:
-            print "Prev exon ID:", int(prev_exon_id)
-            print "Next exon ID:", int(next_exon_id)
-        except ValueError:
-            print "Prev exon ID:", prev_exon_id
-            print "Next exon ID:", next_exon_id
-        print "Next exon name:", next_exon_name
-        print "-------------------------------"
+            splice_start = event_df["last_exon_stop"]
+            splice_stop = event_df["first_exon_start"]
+        prev_exon_name = event_df["exon1"]
+        next_exon_name = event_df["exon2"]
+        prev_exon_id = event_df["start_ex"]
+        next_exon_id = event_df["end_ex"]
 
         # Create coordinates from chr, start and stop
         coordinates = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
