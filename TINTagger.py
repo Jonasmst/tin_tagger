@@ -2096,8 +2096,6 @@ class TINTagger(tk.Tk):
         """
         Draw alternative acceptor events
         """
-        # TODO: Fix spacing between exons.
-
         # Fill in samples information column
         self.populate_samples_frame(data)
 
@@ -2191,7 +2189,7 @@ class TINTagger(tk.Tk):
             upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
             percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
             # Exon drawing coordinates
-            upstream_exon_start_x = (donor_site_width - upstream_exon_width) / 2
+            upstream_exon_start_x = (canvas_width / 3) - (upstream_exon_width / 2)
             # Draw exon background
             row_canvas.create_rectangle(upstream_exon_start_x, exon_start_y, upstream_exon_start_x + upstream_exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
             # Draw exon fill
@@ -2213,7 +2211,7 @@ class TINTagger(tk.Tk):
             max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
             percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
             # Dimensions
-            main_exon_start_x = donor_site_width  # TODO: Look into if this is correct
+            main_exon_start_x = canvas_width / 2
             # Draw exon background
             row_canvas.create_rectangle(main_exon_start_x, exon_start_y, main_exon_start_x + main_exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
             # Draw exon fill
