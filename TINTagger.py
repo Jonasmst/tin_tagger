@@ -1169,7 +1169,7 @@ class TINTagger(tk.Tk):
         Handles next-button presses: Update as_id and initiate reading of new row.
         """
         next_asid_index = self.all_asids.index(self.current_asid) + 1
-        if next_asid_index <= len(self.all_asids):
+        if next_asid_index >= len(self.all_asids):
             print "Woops, no more rows (reached end of dataset)"
             next_asid_index -= 1
             self.set_statusbar_text("Reached end of dataset.")
