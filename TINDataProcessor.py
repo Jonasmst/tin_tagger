@@ -506,7 +506,7 @@ class TINDataProcessor(object):
             })
 
             # Merge template DF with result DF to produce NaNs for RPKM and tot_reads in unreported samples
-            merged_dataframe = template_df.merge(df, how="left", on=["rpkm", "tot_reads"])
+            merged_dataframe = template_df.merge(df, how="left", on=["name", "exon_id"])  # TODO: Test this
 
             # Fill NaNs in rpkm and tot_reads columns with 0s
             final_dataframe = merged_dataframe.fillna(0, axis=1)
@@ -675,7 +675,7 @@ class TINDataProcessor(object):
             ec.tot_reads,
             ec.rpkm
         FROM sample AS s
-        INNER JOIN exon_count AS ec
+        INNER JOIN exon_counts AS ec
             ON s.sample_id=ec.sample_id
         INNER JOIN as_ref_exon AS are
             ON ec.exon_id=are.exon_id
