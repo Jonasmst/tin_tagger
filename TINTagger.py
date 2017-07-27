@@ -1578,7 +1578,7 @@ class TINTagger(tk.Tk):
             if main_exon_psi_data[sample_name]["is_reported"]:
                 psi_text_start_y = text_start_y - 20
                 psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
-                row_canvas.create_text(text_start_x, psi_text_start_y, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+                row_canvas.create_text(text_start_x, psi_text_start_y, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW)
             # END TEST
 
             ########################
