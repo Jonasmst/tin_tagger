@@ -2227,22 +2227,15 @@ class TINTagger(tk.Tk):
             main_exon_text_start_x = main_exon_start_x + (main_exon_width / 2)
             row_canvas.create_text(main_exon_text_start_x + 1, text_start_y + 1, text="%.1f" % combined_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
             row_canvas.create_text(main_exon_text_start_x, text_start_y, text="%.1f" % combined_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
-            # Get PSI values
-            if not main_exon_psi_data[sample_name]["is_reported"]:
-                # No data for this sample
-                sample_psi = -1
-                sample_excluded_counts = -1
-                sample_included_counts = -1
-            else:
+            # Get and draw PSI text
+            if main_exon_psi_data[sample_name]["is_reported"]:
                 sample_psi_data = main_exon_psi_data[sample_name]
                 sample_psi = sample_psi_data["psi"]
                 sample_included_counts = sample_psi_data["included_counts"]
                 sample_excluded_counts = sample_psi_data["excluded_counts"]
-            # Draw PSI text
-            if main_exon_psi_data[sample_name]["is_reported"]:
                 psi_text_start_y = text_start_y - 30
                 psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
-                row_canvas.create_text(main_exon_text_start_x, psi_text_start_y, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+                row_canvas.create_text(main_exon_text_start_x, psi_text_start_y, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
 
             ########################
             # Draw downstream exon #
