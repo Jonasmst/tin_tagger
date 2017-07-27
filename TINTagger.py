@@ -2708,6 +2708,15 @@ class TINTagger(tk.Tk):
             first_main_exon_text_start_x = first_main_exon_start_x + (exon_width / 2)
             row_canvas.create_text(first_main_exon_text_start_x + 1, text_start_y + 1, text="%.1f" % first_main_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
             row_canvas.create_text(first_main_exon_text_start_x, text_start_y, text="%.1f" % first_main_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
+            # Draw PSI values
+            if main_exon_psi_data[sample_name]["is_reported"]:
+                sample_psi_data = main_exon_psi_data[sample_name]
+                sample_psi = sample_psi_data["psi"]
+                sample_included_counts = sample_psi_data["included_counts"]
+                sample_excluded_counts = sample_psi_data["excluded_counts"]
+                psi_text_start_y = exon_start_y - 10
+                psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
+                row_canvas.create_text(first_main_exon_text_start_x, psi_text_start_y, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW)
 
             #########################
             # Draw second main exon #
