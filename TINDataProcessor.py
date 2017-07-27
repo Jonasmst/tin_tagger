@@ -13,12 +13,16 @@ import MySQLdb as mysql
 
 TAG_NO_TAG = -1
 
+
 class TINDataProcessor(object):
 
-    def __init__(self, tag_no_tag):
+    def __init__(self, tin_tagger, tag_no_tag):
         self.testing = True
+        self.tin_tagger = tin_tagger
         self.tag_no_tag = tag_no_tag
         if not self.testing:
+            print "DataProcessor: Connecting to DB"
+            self.tin_tagger.set_statusbar_text("Hello from the DataProcessor!")
             self.db = mysql.connect("localhost", "crc_spliceseq", "TODO:insert_password_here", "crc_spliceseq")
 
         self.samtools_enabled = False  # Flag to determine whether or not to use SAMtools. For testing.
@@ -27,6 +31,7 @@ class TINDataProcessor(object):
         """
         Reads a dataset and returns it as a pandas dataframe
         """
+        print "DataProcessor: load_dataset()"
 
         # TODO: For certain splice types, start_ex and stop_ex is NaN
         # Specify datatypes
@@ -252,7 +257,7 @@ class TINDataProcessor(object):
             },
         }
         """
-        print "Finding main exon PSI, included counts, excluded counts."
+        print "DataProcessor: get_main_exon_psi_by_asid()"
         query = """
         SELECT
             a.as_id,
@@ -318,6 +323,7 @@ class TINDataProcessor(object):
             },
         }
         """
+        print "DataProcessor: get_main_exon_rpkm_by_asid"
 
         # First, find how many (partial) exons are in this splicing events
         if not self.testing:
@@ -332,7 +338,6 @@ class TINDataProcessor(object):
 
         affected_exon_ids = list(num_exons_result["exon_id"].unique())
 
-        print "Finding main exon RPKM"
         query = """
         SELECT
             s.name,
@@ -452,8 +457,8 @@ class TINDataProcessor(object):
             }
         }
         """
+        print "DataProcessor: get_flanking_exons_rpkm_by_exon_ids"
 
-        print "Finding flanking exons RPKM"
         query = """
         SELECT
             s.name,
@@ -567,6 +572,7 @@ class TINDataProcessor(object):
                 }
         }
         """
+        print "DataProcessor: get_row_data()"
         # TODO: Find included_counts and excluded_counts for other exons than the one in question
 
         # Get information
@@ -663,6 +669,7 @@ class TINDataProcessor(object):
            ...
         }
         """
+        print "DataProcessor: get_rpkm_for_mutually_exclusive_exons"
         # Query the SpliceSeq DB
         query = """
         SELECT

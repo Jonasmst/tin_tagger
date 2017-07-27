@@ -160,7 +160,7 @@ class TINTagger(tk.Tk):
         self.canvases = []
 
         # A processor to handle I/O and system calls
-        self.data_processor = TINDataProcessor(TAG_NO_TAG)
+        self.data_processor = TINDataProcessor(self, TAG_NO_TAG)
 
         # No dataset loaded by default
         self.dataset = None
@@ -1027,9 +1027,11 @@ class TINTagger(tk.Tk):
         """
         Calls the data processor to read file by path.
         """
+        print "Tagger: read_dataset()"
         # TODO: Handle empty dataset / non-compliant data formats
         # Feedback: Show busy cursor while dataset is loaded
         self.config(cursor="watch")
+        self.set_statusbar_text("Loading dataset..")
 
         # Get dataset
         self.original_dataset, self.all_asids = self.data_processor.load_dataset(filepath)
@@ -1053,6 +1055,8 @@ class TINTagger(tk.Tk):
             - Collects row data
             - Orchestrates UI update
         """
+        print ""
+        print "Tagger: update_information()"
 
         # Set waiting cursor
         self.config(cursor="watch")
