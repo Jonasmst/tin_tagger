@@ -155,6 +155,8 @@ class TINTagger(tk.Tk):
 
         # No dataset loaded by default
         self.dataset = None
+        # Keep a copy of the original dataset to use when filtering
+        self.original_dataset = None
 
         # Names of all samples in the dataset
         self.sample_names = []
@@ -872,7 +874,7 @@ class TINTagger(tk.Tk):
         native_filters = self.convert_filters_to_native_types()
 
         # Get filtered data from data processor
-        filtered_dataset = self.data_processor.filter_dataset(self.dataset, native_filters)
+        filtered_dataset = self.data_processor.filter_dataset(self.original_dataset, native_filters)
 
         # Check that it isn't None
         try:
@@ -1019,7 +1021,8 @@ class TINTagger(tk.Tk):
         self.config(cursor="watch")
 
         # Get dataset
-        self.dataset, self.all_asids = self.data_processor.load_dataset(filepath)
+        self.original_dataset, self.all_asids = self.data_processor.load_dataset(filepath)
+        self.dataset = self.original_dataset.copy()
 
         # Find and store unique sample names
         self.sample_names = list(self.dataset["name"].unique())
