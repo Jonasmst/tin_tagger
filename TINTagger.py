@@ -2012,7 +2012,7 @@ class TINTagger(tk.Tk):
             text_start_x = upstream_exon_start_x + (upstream_exon_width / 2)
             text_start_y = exon_height - 10
             row_canvas.create_text(text_start_x + 1, text_start_y + 1, text="%.1f" % upstream_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            row_canvas.create_text(text_start_x, text_start_y, text="%.1f" % upstream_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+            row_canvas.create_text(text_start_x, text_start_y, text="%.1f" % upstream_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
 
             ##################
             # Draw main exon #
@@ -2037,7 +2037,7 @@ class TINTagger(tk.Tk):
             # Draw rpkm text
             text_start_x = main_exon_start_x + (main_exon_width / 2)
             row_canvas.create_text(text_start_x + 1, text_start_y + 1, text="%.1f" % combined_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            row_canvas.create_text(text_start_x, text_start_y, text="%.1f" % combined_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+            row_canvas.create_text(text_start_x, text_start_y, text="%.1f" % combined_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
 
             # Get PSI values
             if not main_exon_psi_data[sample_name]["is_reported"]:
@@ -2055,7 +2055,7 @@ class TINTagger(tk.Tk):
             if main_exon_psi_data[sample_name]["is_reported"]:
                 psi_text_start_y = text_start_y - 30
                 psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
-                row_canvas.create_text(text_start_x, psi_text_start_y, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+                row_canvas.create_text(text_start_x, psi_text_start_y, text=psi_text, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
 
             ########################
             # Draw downstream exon #
@@ -2077,7 +2077,7 @@ class TINTagger(tk.Tk):
             # Draw rpkm text
             text_start_x = downstream_exon_start_x + (downstream_exon_width / 2)
             row_canvas.create_text(text_start_x + 1, text_start_y + 1, text="%.1f" % downstream_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT_SHADOW, tags="text_shadow")
-            row_canvas.create_text(text_start_x, text_start_y, text="%.1f" % downstream_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT)
+            row_canvas.create_text(text_start_x, text_start_y, text="%.1f" % downstream_exon_rpkm, font="tkDefaultFont 16", fill=COLOR_CANVAS_TEXT, tags="exon_rpkm_text")
 
             # Prepare for next sample
             row_number += 1
