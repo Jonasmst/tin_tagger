@@ -1271,7 +1271,10 @@ class TINTagger(tk.Tk):
             # Get sample information
             sample_data = data["samples"][sample_name]
             gene_rpkm = sample_data["gene_rpkm"]
-            gene_rpkm_percent_of_max = (float(gene_rpkm) / float(data["max_gene_rpkm"])) * 100
+            try:
+                gene_rpkm_percent_of_max = (float(gene_rpkm) / float(data["max_gene_rpkm"])) * 100
+            except ZeroDivisionError:
+                gene_rpkm_percent_of_max = 0
 
             # Create frame for this sample
             frame_for_sample = ttk.Frame(self.sample_frame, padding=5)
@@ -1532,7 +1535,10 @@ class TINTagger(tk.Tk):
             ######################
             upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
             upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
-            percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
 
             upstream_exon_start_x = (width_per_exon_container - exon_width) / 2
 
@@ -1565,7 +1571,10 @@ class TINTagger(tk.Tk):
             sample_rpkm_data = main_exon_rpkm_data[sample_name]
             combined_rpkm = sample_rpkm_data["combined_rpkm"]
             max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
-            percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
 
             # Get PSI values
             if not main_exon_psi_data[sample_name]["is_reported"]:
@@ -1605,7 +1614,10 @@ class TINTagger(tk.Tk):
             ########################
             downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
             downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
-            percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
 
             downstream_exon_start_x = main_exon_start_x + width_per_exon_container
 
@@ -1613,7 +1625,6 @@ class TINTagger(tk.Tk):
             row_canvas.create_rectangle(downstream_exon_start_x, exon_start_y, downstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
 
             # Draw exon fill
-            # fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_coverage/100) * exon_height))
             fill_start_y = (exon_start_y + exon_height) - (int((percent_of_max_rpkm/100) * exon_height))
             row_canvas.create_rectangle(downstream_exon_start_x, fill_start_y, downstream_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor)
 
@@ -1738,7 +1749,10 @@ class TINTagger(tk.Tk):
             # Get RPKM values
             upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
             upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
-            percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
 
             # Draw exon background
             row_canvas.create_rectangle(
@@ -1785,7 +1799,10 @@ class TINTagger(tk.Tk):
             # Get RPKM values
             downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
             downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
-            percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
 
             # Draw exon background
             row_canvas.create_rectangle(
@@ -1832,7 +1849,10 @@ class TINTagger(tk.Tk):
             sample_rpkm_data = main_exon_rpkm_data[sample_name]
             combined_rpkm = sample_rpkm_data["combined_rpkm"]
             max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
-            percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
 
             intron_start_x = upstream_exon_start_x + exon_width
             # Draw intron coverage fill
@@ -2023,7 +2043,10 @@ class TINTagger(tk.Tk):
             sample_rpkm_data = main_exon_rpkm_data[sample_name]
             combined_rpkm = sample_rpkm_data["combined_rpkm"]
             max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
-            percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
 
             # Dimensions
             main_exon_start_x = upstream_exon_start_x + upstream_exon_width
@@ -2065,7 +2088,10 @@ class TINTagger(tk.Tk):
             # Get RPKM values
             downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
             downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
-            percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
 
             downstream_exon_start_x = donor_site_width  # Not sure if this is right
 
@@ -2187,7 +2213,10 @@ class TINTagger(tk.Tk):
             # Get RPKM values
             upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
             upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
-            percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
             # Exon drawing coordinates
             upstream_exon_start_x = (canvas_width / 3) - (upstream_exon_width / 2)
             # Draw exon background
@@ -2209,7 +2238,10 @@ class TINTagger(tk.Tk):
             sample_rpkm_data = main_exon_rpkm_data[sample_name]
             combined_rpkm = sample_rpkm_data["combined_rpkm"]
             max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
-            percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
             # Dimensions
             main_exon_start_x = canvas_width / 2
             # Draw exon background
@@ -2236,7 +2268,10 @@ class TINTagger(tk.Tk):
             ########################
             downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
             downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
-            percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
             downstream_exon_start_x = main_exon_start_x + main_exon_width
             # Draw exon background
             row_canvas.create_rectangle(downstream_exon_start_x, exon_start_y, downstream_exon_start_x + downstream_exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
@@ -2376,7 +2411,10 @@ class TINTagger(tk.Tk):
             sample_rpkm_data = main_exon_rpkm_data[sample_name]
             combined_rpkm = sample_rpkm_data["combined_rpkm"]
             max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
-            percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
 
             # Calc fill Y position
             fill_start_y = (one_y + two_y) - (int((percent_of_max_rpkm / 100) * exon_height))
@@ -2538,7 +2576,10 @@ class TINTagger(tk.Tk):
             sample_rpkm_data = main_exon_rpkm_data[sample_name]
             combined_rpkm = sample_rpkm_data["combined_rpkm"]
             max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
-            percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            try:
+                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+            except ZeroDivisionError:
+                percent_of_max_rpkm = 0
 
             # Calc fill Y position
             fill_start_y = (one_y + two_y) - (int((percent_of_max_rpkm / 100) * exon_height))
@@ -2674,7 +2715,10 @@ class TINTagger(tk.Tk):
             upstream_exon_start_x = exon_padding
             upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
             upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
-            upstream_percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
+            try:
+                upstream_percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                upstream_percent_of_max_rpkm = 0
             # Draw exon background
             row_canvas.create_rectangle(upstream_exon_start_x, exon_start_y, upstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
             fill_start_y = (exon_start_y + exon_height) - (int((upstream_percent_of_max_rpkm / 100) * exon_height))
@@ -2692,7 +2736,10 @@ class TINTagger(tk.Tk):
             # Get combined RPKM for first exon(s)
             first_main_exon_rpkm = main_exon_rpkm_data[sample_name]["first_exon"]["combined_rpkm"]
             first_main_exon_max_rpkm = main_exon_rpkm_data[sample_name]["first_exon"]["max_combined_rpkm"]
-            first_main_exon_percent_of_max_rpkm = (float(first_main_exon_rpkm) / float(first_main_exon_max_rpkm)) * 100
+            try:
+                first_main_exon_percent_of_max_rpkm = (float(first_main_exon_rpkm) / float(first_main_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                first_main_exon_percent_of_max_rpkm = 0
             first_main_exon_name = main_exon_rpkm_data[sample_name]["first_exon"]["joined_exon_name"]
             # Draw exon background
             first_main_exon_start_x = upstream_exon_start_x + exon_width + (exon_padding * 2)
@@ -2722,7 +2769,10 @@ class TINTagger(tk.Tk):
             # Get combined RPKM for second exon(s)
             second_main_exon_rpkm = main_exon_rpkm_data[sample_name]["second_exon"]["combined_rpkm"]
             second_main_exon_max_rpkm = main_exon_rpkm_data[sample_name]["second_exon"]["max_combined_rpkm"]
-            second_main_exon_percent_of_max_rpkm = (float(second_main_exon_rpkm) / float(second_main_exon_max_rpkm)) * 100
+            try:
+                second_main_exon_percent_of_max_rpkm = (float(second_main_exon_rpkm) / float(second_main_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                second_main_exon_percent_of_max_rpkm = 0
             second_main_exon_name = main_exon_rpkm_data[sample_name]["second_exon"]["joined_exon_name"]
             # Draw exon background
             second_main_exon_start_x = first_main_exon_start_x + exon_width + (exon_padding * 2)
@@ -2743,7 +2793,10 @@ class TINTagger(tk.Tk):
             downstream_exon_start_x = second_main_exon_end_x + (exon_padding * 2)
             downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
             downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
-            downstream_percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            try:
+                downstream_percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
+            except ZeroDivisionError:
+                downstream_percent_of_max_rpkm = 0
             # Draw exon background
             row_canvas.create_rectangle(downstream_exon_start_x, exon_start_y, downstream_exon_start_x + exon_width, exon_start_y + exon_height, fill=canvas_background, outline=exon_bordercolor)
             fill_start_y = (exon_start_y + exon_height) - (int((downstream_percent_of_max_rpkm / 100) * exon_height))
