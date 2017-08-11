@@ -1547,7 +1547,7 @@ class TINTagger(tk.Tk):
         """
 
         # Get current tag for this sample and as_id
-        current_tag = self.data_processor.get_tag_by_sample_name_and_as_id(sample_name, as_id, self.dataset)
+        current_tag = self.data_processor.get_tag_by_sample_name_and_as_id(sample_name, as_id, self.original_dataset)
 
         # This is the tag to be changed in the dataset
         set_tag = new_tag
