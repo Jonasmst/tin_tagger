@@ -5,12 +5,15 @@ import re
 from tkFileDialog import askopenfilename, asksaveasfilename
 import tkFont
 import pandas as pd
+import numpy as np
 import os
 import copy
 import random
 import subprocess
 import tkMessageBox
 from TINDataProcessor import TINDataProcessor
+from multiprocessing import Process, Queue
+from Queue import Empty
 
 # TODO: Cache rows so we don't need to run samtools etc when pressing previous-button
 # TODO: Find PSI, included counts, excluded counts for other exons and display if it's available (gonna be an sql-call).
@@ -19,7 +22,7 @@ from TINDataProcessor import TINDataProcessor
 # TODO: Sort dataset by gene, then "exons" to show similar events after each other?
 # TODO: Text is huge on linux
 # TODO: Add feedback as text in the statusbar when connecting to DB and reading datasets. Blink/animate (non-static)
-
+# TODO: Support both reading from database and reading from local file
 
 """
 ################################################
@@ -141,6 +144,10 @@ class TINTagger(tk.Tk):
         self.current_theme.set(self.style.theme_use())
         self.current_theme.trace("w", self.change_theme)
 
+        # TEST
+        self.all_uninteresting_buttons = []
+        # END TEST
+
         # Text size for all canvas text items
         self.canvas_text_size = 16
         self.canvas_font = ("tkDefaultFont", self.canvas_text_size)
@@ -164,10 +171,14 @@ class TINTagger(tk.Tk):
         # Keep a copy of the original dataset to use when filtering
         self.original_dataset = None
 
+        # Keep track of whether we're currently waiting for a dataset to be read
+        self.reading_dataset = False
+
         # Names of all samples in the dataset
         self.sample_names = []
 
         # Start on first asid. # TODO: 0 is not necessarily a valid as_id
+        self.all_asids = []
         self.current_asid = 0
 
         # Mapping exon skipping abbreviations to full text
@@ -236,7 +247,8 @@ class TINTagger(tk.Tk):
         self.right_sidebar = self.create_right_sidebar()
 
         # Create load frame
-        self.load_frame = self.create_load_frame()
+        self.draw_animation = False  # Controls whether to show a loading animation
+        self.load_frame, self.spinner_label, self.spinner_frames = self.create_load_frame()
 
         # Create statusbar at the bottom
         self.statusbar = self.create_statusbar()
@@ -245,7 +257,7 @@ class TINTagger(tk.Tk):
         self.data_processor = TINDataProcessor(self, TAG_NO_TAG)
 
         # Paths to bam files
-        self.bam_paths = self.data_processor.get_bam_file_paths()
+        # self.bam_paths = self.data_processor.get_bam_file_paths()
 
         ######################################
         # All set to handle user interaction #
@@ -373,6 +385,12 @@ class TINTagger(tk.Tk):
 
         current_row += 1
 
+        # TEST: Button for training decision tree
+        decision_tree_training_button = ttk.Button(sidebar_information, text="Train decision tree", command=self.train_decision_tree)
+        decision_tree_training_button.grid(column=0, row=current_row, sticky="W")
+        current_row += 1
+        # END TEST
+
         # Buttons frame
         sidebar_buttons = ttk.Frame(right_sidebar, padding=5)
         sidebar_buttons.grid(column=0, row=1, sticky="EWS")
@@ -393,6 +411,16 @@ class TINTagger(tk.Tk):
         sidebar_buttons.columnconfigure(2, weight=1)
 
         return right_sidebar
+
+    def train_decision_tree(self):
+        """
+        Tells the dataprocessor to tell its tin_learner to train its decision tree.
+        """
+        tree_accuracy = self.data_processor.tin_learner.train_decision_tree(self.original_dataset)
+        if not tree_accuracy:
+            self.set_statusbar_text("ERROR: Decision tree could not be trained: Too few tagged events.")
+        else:
+            self.set_statusbar_text("Decision tree trained. Accuracy: %.2f" % tree_accuracy)
 
     def create_statusbar(self):
         """
@@ -446,19 +474,146 @@ class TINTagger(tk.Tk):
         """
         Creates an empty frame with "open file.." button.
         """
-        # Display prompt to load file
+
+        # TODO: Align DB labels and entries.
+
+        # Display prompts to load dataset
         load_frame = ttk.Frame(self.main_frame)
         load_frame.grid(column=0, row=0, sticky="NEWS")
-        load_label = ttk.Label(load_frame, text="No dataset found, please load one: ")
-        load_label.grid(column=0, row=0, sticky="E")
-        load_button = ttk.Button(load_frame, text="Open file..", command=self.open_file)
-        load_button.grid(column=1, row=0, sticky="W")
 
-        load_frame.columnconfigure(0, weight=1)
-        load_frame.columnconfigure(1, weight=1)
+        # Create a top frame for file and DB widgets
+        top_frame = ttk.Frame(load_frame)
+        top_frame.grid(column=0, row=0, sticky="NEWS")
+        top_frame.columnconfigure(0, weight=1)
+        top_frame.rowconfigure(0, weight=1)
+
+        # And a bottom frame for the spinner
+        bottom_frame = ttk.Frame(load_frame)
+        bottom_frame.grid(column=0, row=1, sticky="NEWS")
+        bottom_frame.columnconfigure(0, weight=1)
+
+        # Divide even weight for top and bottom frames
         load_frame.rowconfigure(0, weight=1)
+        load_frame.rowconfigure(1, weight=1)
+        load_frame.columnconfigure(0, weight=1)
 
-        return load_frame
+        #######################
+        ###### Top frame ######
+        #######################
+
+        # Title
+        title_label = ttk.Label(top_frame, text="No dataset currently loaded", font="tkDefaultFont 26")
+        title_label.grid(column=0, row=0, sticky="N")
+        # Frame for open file text and button
+        file_frame = ttk.Frame(top_frame)
+        file_frame.grid(column=0, row=1)
+        # Load file label and button
+        file_label = ttk.Label(file_frame, text="Load from file:")
+        file_label.grid(column=0, row=0)
+        file_button = ttk.Button(file_frame, text="Open file..", command=self.open_file)
+        file_button.grid(column=1, row=0)
+        # - OR - text
+        or_text = ttk.Label(top_frame, text="- OR -", padding=(10, 100, 10, 100))
+        or_text.grid(column=0, row=2)
+        # Database frame
+        db_labelframe = ttk.LabelFrame(top_frame, text="Load from database")
+        db_labelframe.grid(column=0, row=3)
+        # Left DB frame (for text lables)
+        db_left_frame = ttk.Frame(db_labelframe)
+        db_left_frame.grid(column=0, row=0)
+        # Right DB frame (for text entries)
+        db_right_frame = ttk.Frame(db_labelframe)
+        db_right_frame.grid(column=1, row=0)
+        # URL label
+        url_label = ttk.Label(db_left_frame, text="Database URL:")
+        url_label.grid(column=0, row=0, sticky="W")
+        # User label
+        user_label = ttk.Label(db_left_frame, text="Username:")
+        user_label.grid(column=0, row=1, sticky="W")
+        # Password label
+        password_label = ttk.Label(db_left_frame, text="Password:")
+        password_label.grid(column=0, row=2, sticky="W")
+        # URL entry
+        url_entry = ttk.Entry(db_right_frame)
+        url_entry.grid(column=0, row=0)
+        # User entry
+        user_entry = ttk.Entry(db_right_frame)
+        user_entry.grid(column=0, row=1)
+        # Password entry
+        password_entry = ttk.Entry(db_right_frame, show="*")
+        password_entry.grid(column=0, row=2)
+        # Name label
+        name_label = ttk.Label(db_left_frame, text="Database name:")
+        name_label.grid(column=0, row=3)
+        # Name entry
+        name_entry = ttk.Entry(db_right_frame)
+        name_entry.grid(column=0, row=3)
+        # Connect button
+        connect_button = ttk.Button(
+            db_labelframe,
+            text="Connect",
+            command=lambda: self.get_dataset_from_database(
+                db_url=url_entry.get(),
+                db_username=user_entry.get(),
+                db_password=password_entry.get(),
+                db_name=name_entry.get()
+            )
+        )
+        connect_button.grid(column=0, row=4, columnspan=2, sticky="E")
+
+        ##########################
+        ###### Bottom frame ######
+        ##########################
+        # Label for the spinner
+        spinner_label = ttk.Label(bottom_frame)
+        spinner_label.grid(column=0, row=0)
+        num_frames = 30
+        spinner_frames = [tk.PhotoImage(file="spinner.gif", format="gif -index %i" % i) for i in range(num_frames)]
+
+        return load_frame, spinner_label, spinner_frames
+
+    def update_spinner_animation(self, index):
+        """
+        Handles the animation of a loading GIF, essentially just iterating frames in a GIF-file.
+        """
+        if not self.draw_animation:
+            # Stop drawing this animation
+            return
+        frame = self.spinner_frames[index]
+        index += 1
+        if index >= 30:
+            index = 0
+        self.spinner_label.configure(image=frame)
+        self.after(10, self.update_spinner_animation, index)
+
+    def get_dataset_from_database(self, db_url, db_username, db_password, db_name):
+        """
+        Queries the SpliceSeq database to retrieve dataset.
+        :param db_url: URL to database
+        :param db_username: Username
+        :param db_password: Password
+        :param db_name: Name of database
+        """
+
+        # Spin loading animation while dataset is retrieved
+        self.draw_animation = True
+        self.after(0, self.update_spinner_animation, 0)
+
+        # Get dataset from DB via data processor
+        process_queue = Queue()
+        self.reading_dataset = True
+        query_db_process = Process(
+            target=self.data_processor.get_dataset_from_database,
+            args=(
+                db_url,
+                db_username,
+                db_password,
+                db_name,
+                process_queue
+            )
+        )
+        query_db_process.start()
+        self.check_io_queue(process_queue)
 
     def set_statusbar_text(self, text):
         self.statusbar_text["text"] = text
@@ -1018,6 +1173,7 @@ class TINTagger(tk.Tk):
         """
         # Open file chooser dialog
         filename = askopenfilename()
+        self.update()  # Without this, the file dialog remains present while the file is being read
 
         # Check if file was chosen
         if len(filename) > 0:
@@ -1027,27 +1183,59 @@ class TINTagger(tk.Tk):
         """
         Calls the data processor to read file by path.
         """
-        print "Tagger: read_dataset()"
-        # TODO: Handle empty dataset / non-compliant data formats
-        # Feedback: Show busy cursor while dataset is loaded
-        self.config(cursor="watch")
+        # Draw load animation while file is being read
         self.set_statusbar_text("Loading dataset..")
+        self.draw_animation = True
+        self.after(0, self.update_spinner_animation, 0)
 
-        # Get dataset
-        self.original_dataset, self.all_asids = self.data_processor.load_dataset(filepath)
-        self.dataset = self.original_dataset.copy()
+        # Read dataset in a background process
+        process_queue = Queue()
+        self.reading_dataset = True  # True means we should keep checking for a dataset being read
+        readfile_process = Process(target=self.data_processor.load_dataset, args=(filepath, process_queue))
+        readfile_process.start()
+        # Listen for changes to the queue, i.e. wether or not dataset has been read
+        self.check_io_queue(process_queue)
 
-        # Find and store unique sample names
-        self.sample_names = list(self.dataset["name"].unique())
+    def check_io_queue(self, queue):
+        """
+        Checks whether dataset is done loading.
+        :param queue: The Queue used for reading in the dataset
+        :return:
+        """
+        # TODO: Handle empty dataset / non-compliant data formats
+        try:
+            self.original_dataset = queue.get_nowait()
+            try:
+                if not self.original_dataset:
+                    # Reading functions returning False means something went wrong.
+                    self.reading_dataset = False
+                    self.draw_animation = False
+                    self.set_statusbar_text("IO ERROR: something went wrong when reading dataset.")
+                    return
+            except ValueError:
+                # It's a dataframe
+                # TODO: Check if df is empty
+                # For now, do nothing
+                pass
 
-        # Default to the first as_id in the file
-        self.current_asid = self.all_asids[0]
+            # Result is an actual dataset
+            self.all_asids = sorted(list(self.original_dataset["as_id"].unique()))
+            self.dataset = self.original_dataset.copy()
+            self.reading_dataset = False
+            # Find and store unique sample names
+            self.sample_names = list(self.dataset["name"].unique())
+            # Default to the first as_id in the file
+            self.current_asid = self.all_asids[0]
+            self.draw_animation = False
 
-        # Handle data
-        self.update_information()
+            # Handle data
+            self.update_information()
+        except Empty:
+            # Do nothing, just wait for data to be read
+            pass
 
-        # Show normal cursor again
-        self.config(cursor="")
+        if self.reading_dataset:
+            self.after(500, self.check_io_queue, queue)
 
     def update_information(self):
         """
@@ -1059,44 +1247,25 @@ class TINTagger(tk.Tk):
         print "Tagger: update_information()"
 
         # Set waiting cursor
-        self.config(cursor="watch")
+        #self.config(cursor="watch")
+
+        # TEST: Right-click on uncertain buttons
+        self.all_uninteresting_buttons = []
+        # END TEST
 
         # If no dataset is loaded, prompt user to load one
-        try:
-            if len(self.dataset) > 0:
-                self.load_frame.destroy()
-
-                # Show right sidebar
-                self.right_sidebar.grid()
-                self.left_frame.grid()
-
-        except TypeError:
-            # Hide right sidebar
-            self.right_sidebar.grid_remove()
-            self.left_frame.grid_remove()
-
+        if self.is_dataset_loaded():
+            # TODO: Does this have to be called for every as_id? (The hide_load_frame, that is)
+            # Dataset is loaded, hide load frame and display sidebars
+            self.hide_load_frame()
+        else:
+            # No dataset loaded, hide sidebars and display load frame
+            self.show_load_frame()
             self.set_statusbar_text("No dataset loaded.")
-            self.load_frame.grid()
-
-            # Dodge the open-file-dialog when testing/debugging
+            # Dodge the open-file-dialog when testing/debugging # TODO: Remove this
             if self.testing:
-                self.read_dataset("/Users/jonas/Dropbox/phd/code/tin_tagger/datasets/mikes_query_with_tags.tsv")
-
-            # Reset cursor
-            self.config(cursor="")
-            return
-
-        # Make sure the dataset is not empty
-        if len(self.dataset) == 0:
-            # Hide right sidebar
-            self.right_sidebar.grid_remove()
-            # Hide sample frame
-            self.left_frame.grid_remove()
-            # Update statusbar text
-            self.set_statusbar_text("Loaded dataset was empty, please select another.")
-            self.load_frame.grid()
-            # Reset cursor
-            self.config(cursor="")
+                #self.read_dataset("/Users/jonas/Dropbox/phd/code/tin_tagger/datasets/mikes_query_with_tags.tsv")
+                pass
             return
 
         # Display which event we're at in the statusbar
@@ -1106,11 +1275,11 @@ class TINTagger(tk.Tk):
         self.update_tag_information()
 
         # Get data for this row
-        data = self.data_processor.get_row_data(self.current_asid, self.dataset, self.sample_names, self.bam_paths, self.testing)
+        data = self.data_processor.get_row_data(self.current_asid, self.original_dataset, self.sample_names, self.testing)
 
         # Populate the sidebar with general information
         self.asid_text["text"] = data["as_id"]
-        self.location_text["text"] = data["location"]
+        self.location_text["text"] = data["coords"]
         self.splice_type_text["text"] = "%s (%s)" % (self.splice_type_map[data["splice_type"]], data["splice_type"])
         self.exons_text["text"] = data["exons"]
         self.gene_text["text"] = data["gene_symbol"]
@@ -1141,7 +1310,36 @@ class TINTagger(tk.Tk):
             self.draw_mutually_exclusive_exons_event(data)
 
         # Reset cursor now that we're done with loading everything
-        self.config(cursor="")
+        #self.config(cursor="")
+
+    def is_dataset_loaded(self):
+        """
+        Checks whether there's a dataset currently loaded and returns answer as a boolean
+        """
+        try:
+            if len(self.dataset) > 0:
+                return True
+            else:
+                self.set_statusbar_text("Current dataset is empty.")
+                return False
+        except TypeError:
+            return False
+
+    def show_load_frame(self):
+        """
+        Shows a blank UI with a prompt to open a file, also hides the sidebars
+        """
+        self.right_sidebar.grid_remove()
+        self.left_frame.grid_remove()
+        self.load_frame.grid()
+
+    def hide_load_frame(self):
+        """
+        Hides the open-file prompt and displays the sidebar
+        """
+        self.load_frame.destroy()
+        self.right_sidebar.grid()
+        self.left_frame.grid()
 
     def update_tag_information(self):
         """
@@ -1150,24 +1348,32 @@ class TINTagger(tk.Tk):
         """
 
         # Find events that are tagged as interesting
-        positive_tags = len(self.dataset.loc[self.dataset["event_tag"] == TAG_INTERESTING])
+        positive_tags = len(self.original_dataset.loc[self.original_dataset["event_tag"] == TAG_INTERESTING])
         self.statusbar_text_interesting["text"] = "%d" % positive_tags
 
         # Find events that are tagged as not interesting
-        negative_tags = len(self.dataset.loc[self.dataset["event_tag"] == TAG_NOT_INTERESTING])
+        negative_tags = len(self.original_dataset.loc[self.original_dataset["event_tag"] == TAG_NOT_INTERESTING])
         self.statusbar_text_not_interesting["text"] = "%d" % negative_tags
 
         # Find events that are tagged as uncertain
-        neutral_tags = len(self.dataset.loc[self.dataset["event_tag"] == TAG_UNCERTAIN])
+        neutral_tags = len(self.original_dataset.loc[self.original_dataset["event_tag"] == TAG_UNCERTAIN])
         self.statusbar_text_uncertain["text"] = "%d" % neutral_tags
 
         # Find how many events are tagged, in total
-        total_events = len(self.dataset)
+        total_events = len(self.original_dataset)
         total_tags = positive_tags + negative_tags + neutral_tags
         self.statusbar_text_progress["text"] = "%d/%d" % (total_tags, total_events)
 
     def save_file(self):
         print "Bleep, blop, saving file."
+        filepath = asksaveasfilename(title="Save filters", defaultextension=".tsv")
+
+        if not filepath:
+            print "Unable to save to file: Filepath is None"
+            return
+        else:
+            print "Saving file to %s" % filepath
+            self.dataset.to_csv(filepath, sep="\t", index=False)
 
     def left_arrow_clicked(self, event):
         """
@@ -1272,8 +1478,15 @@ class TINTagger(tk.Tk):
             sample_data = data["samples"][sample_name]
             gene_rpkm = sample_data["gene_rpkm"]
             try:
-                gene_rpkm_percent_of_max = (float(gene_rpkm) / float(data["max_gene_rpkm"])) * 100
+                gene_rpkm_percent_of_max = (float(gene_rpkm) / float(sample_data["max_gene_rpkm"])) * 100
+                try:
+                    int_percent = int(gene_rpkm_percent_of_max)
+                except ValueError:
+                    print "Percent of max:", gene_rpkm_percent_of_max
+                    gene_rpkm_percent_of_max = 0
             except ZeroDivisionError:
+                gene_rpkm_percent_of_max = 0
+            except ValueError:
                 gene_rpkm_percent_of_max = 0
 
             # Create frame for this sample
@@ -1283,7 +1496,7 @@ class TINTagger(tk.Tk):
 
             # Display RPKM info in statusbar on hover
             display_text = "%s gene RPKM: %s/%s (%.0f%%)" % (
-            sample_name, str(gene_rpkm), str(data["max_gene_rpkm"]), gene_rpkm_percent_of_max)
+                sample_name, str(gene_rpkm), str(sample_data["max_gene_rpkm"]), gene_rpkm_percent_of_max)
             frame_for_sample.bind("<Enter>", store_rpkm_text(display_text))
             rpkm_color = COLOR_RED
 
@@ -1338,8 +1551,8 @@ class TINTagger(tk.Tk):
         if current_tag == new_tag:
             set_tag = TAG_NO_TAG
 
-        # Update the dataset
-        self.data_processor.set_tag_by_sample_name_and_as_id(set_tag, sample_name, as_id, self.dataset)
+        # Update the (original) dataset
+        self.data_processor.set_tag_by_sample_name_and_as_id(set_tag, sample_name, as_id, self.original_dataset)
 
         # Clear all button styles
         up_button.configure(style=STYLE_BUTTON_INTERESTING_OFF)
@@ -1423,6 +1636,13 @@ class TINTagger(tk.Tk):
         down_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_NOT_INTERESTING, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
         uncertain_button.config(command=lambda name=sample_name, splice_id=as_id, new_tag=TAG_UNCERTAIN, button_up=up_button, button_down=down_button, button_uncertain=uncertain_button: self.tag_button_clicked(name, splice_id, new_tag, button_up, button_down, button_uncertain))
 
+        # TEST
+        #uncertain_button.bind("<Button-3>", self.right_click)
+        down_button.bind("<Button-2>", self.right_click)
+        self.all_uninteresting_buttons.append(down_button)
+        #uncertain_button.bind("<Button-1>", self.right_click)
+        # END TEST
+
         # Disable buttons if the event is not reported for this sample
         if not is_reported:
             up_button.state(["disabled"])
@@ -1433,6 +1653,27 @@ class TINTagger(tk.Tk):
         button_frame.rowconfigure(1, weight=1)
         button_frame.rowconfigure(2, weight=1)
         # END tagging buttons
+
+    def right_click(self, event):
+        print "RIGHT CLICK"
+        """
+        # THIS WORKS, BUT IS EXTREMELY HACKY (AND SLOW)
+        # Mark all as uncertain
+        for child in self.exon_frame.winfo_children():
+            for subchild in child.winfo_children():
+                for subsubchild in subchild.winfo_children():
+                    print "Class:", subsubchild.winfo_class
+                    #if subsubchild.winfo_class == "Button":
+                    if isinstance(subsubchild, ttk.Button):
+                        print "It's a button"
+                        if subsubchild.cget("text") == "?":
+                            subsubchild.invoke()
+
+        """
+
+        for uninteresting_button in self.all_uninteresting_buttons:
+            uninteresting_button.invoke()
+
 
     def draw_exon_skipping_event(self, data):
         """
@@ -1488,9 +1729,9 @@ class TINTagger(tk.Tk):
         next_exon_id = data["next_exon_id"]
 
         # Get rpkm/tot_reads for flanking exons
-        flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
-        main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
-        main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
+        # flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
+        #main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
+        #main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
 
         # Iterate samples
         for sample_name in sample_names_sorted:
@@ -1499,6 +1740,9 @@ class TINTagger(tk.Tk):
             # Sample-specific variables
             is_reported = sample_data["is_reported"]
             sample_tag = sample_data["event_tag"]
+            # TODO: Update colors depending on tag
+            decision_tree_prediction = sample_data["decision_tree_prediction"]
+            print "TINTagger got prediction <%d> for sample <%s>" % (decision_tree_prediction, sample_name)
 
             # Setup colors
             canvas_background = "white"
@@ -1533,11 +1777,16 @@ class TINTagger(tk.Tk):
             ######################
             # Draw upstream exon #
             ######################
-            upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
-            upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            #upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
+            #upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            upstream_exon_rpkm = sample_data["prev_exon_rpkm"]
+            upstream_exon_max_rpkm = sample_data["prev_exon_max_rpkm"]
             try:
                 percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
             except ZeroDivisionError:
+                percent_of_max_rpkm = 0
+
+            if np.isnan(percent_of_max_rpkm):
                 percent_of_max_rpkm = 0
 
             upstream_exon_start_x = (width_per_exon_container - exon_width) / 2
@@ -1567,28 +1816,33 @@ class TINTagger(tk.Tk):
             ##################
             # Draw main exon #
             ##################
+            main_exon_start_x = upstream_exon_start_x + width_per_exon_container  # Not sure if this is correct
+            main_exon_text_start_x = main_exon_start_x + (exon_width / 2)
+
             # Get RPKM values
-            sample_rpkm_data = main_exon_rpkm_data[sample_name]
-            combined_rpkm = sample_rpkm_data["combined_rpkm"]
-            max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            #sample_rpkm_data = main_exon_rpkm_data[sample_name]
+            #combined_rpkm = sample_rpkm_data["combined_rpkm"]
+            #max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            avg_rpkm = sample_data["avg_rpkm"]
+            max_avg_rpkm = sample_data["max_avg_rpkm"]
             try:
-                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+                percent_of_max_rpkm = (float(avg_rpkm) / float(max_avg_rpkm)) * 100
             except ZeroDivisionError:
                 percent_of_max_rpkm = 0
 
             # Get PSI values
-            if not main_exon_psi_data[sample_name]["is_reported"]:
-                # No data for this sample
-                sample_psi = -1
-                sample_excluded_counts = -1
-                sample_included_counts = -1
-            else:
-                sample_psi_data = main_exon_psi_data[sample_name]
-                sample_psi = sample_psi_data["psi"]
-                sample_included_counts = sample_psi_data["included_counts"]
-                sample_excluded_counts = sample_psi_data["excluded_counts"]
-
-            main_exon_start_x = upstream_exon_start_x + width_per_exon_container  # Not sure if this is correct
+            #if not main_exon_psi_data[sample_name]["is_reported"]:
+            if sample_data["is_reported"]:
+                #sample_psi_data = main_exon_psi_data[sample_name]
+                #sample_psi = sample_psi_data["psi"]
+                sample_psi = sample_data["psi"]
+                #sample_included_counts = sample_psi_data["included_counts"]
+                sample_included_counts = sample_data["included_counts"]
+                #sample_excluded_counts = sample_psi_data["excluded_counts"]
+                sample_excluded_counts = sample_data["excluded_counts"]
+                psi_text_start_y = upstream_exon_text_start_y - 20
+                psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
+                row_canvas.create_text(main_exon_text_start_x, psi_text_start_y, text=psi_text, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_COVERAGE)
 
             # Draw exon background
             border_width = 1
@@ -1599,21 +1853,16 @@ class TINTagger(tk.Tk):
             row_canvas.create_rectangle(main_exon_start_x, fill_start_y, main_exon_start_x + exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor, width=border_width)
 
             # Draw rpkm text. NOTE: Text colors are controlled in ResizingCanvas.on_resize()
-            main_exon_text_start_x = main_exon_start_x + (exon_width / 2)
-            row_canvas.create_text(main_exon_text_start_x + 1, upstream_exon_text_start_y + 1, text="%.1f" % combined_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
-            row_canvas.create_text(main_exon_text_start_x, upstream_exon_text_start_y, text="%.1f" % combined_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
-
-            # Draw PSI and counts
-            if main_exon_psi_data[sample_name]["is_reported"]:
-                psi_text_start_y = upstream_exon_text_start_y - 20
-                psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
-                row_canvas.create_text(main_exon_text_start_x, psi_text_start_y, text=psi_text, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_COVERAGE)
+            row_canvas.create_text(main_exon_text_start_x + 1, upstream_exon_text_start_y + 1, text="%.1f" % avg_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
+            row_canvas.create_text(main_exon_text_start_x, upstream_exon_text_start_y, text="%.1f" % avg_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
 
             ########################
             # Draw downstream exon #
             ########################
-            downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
-            downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            #downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
+            #downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            downstream_exon_rpkm = sample_data["next_exon_rpkm"]
+            downstream_exon_max_rpkm = sample_data["next_exon_max_rpkm"]
             try:
                 percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
             except ZeroDivisionError:
@@ -1704,9 +1953,9 @@ class TINTagger(tk.Tk):
         next_exon_id = data["next_exon_id"]
 
         # Get rpkm/tot_reads for flanking exons
-        flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
-        main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
-        main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
+        #flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
+        #main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
+        #main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
 
         # Iterate samples
         for sample_name in sorted(data["samples"].keys(), key=natural_sort_key):
@@ -1747,8 +1996,10 @@ class TINTagger(tk.Tk):
             # Draw upstream exon #
             ######################
             # Get RPKM values
-            upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
-            upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            #upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
+            #upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            upstream_exon_rpkm = sample_data["prev_exon_rpkm"]
+            upstream_exon_max_rpkm = sample_data["prev_exon_max_rpkm"]
             try:
                 percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
             except ZeroDivisionError:
@@ -1797,8 +2048,10 @@ class TINTagger(tk.Tk):
             # Draw downstream exon #
             ########################
             # Get RPKM values
-            downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
-            downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            #downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
+            #downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            downstream_exon_rpkm = sample_data["next_exon_rpkm"]
+            downstream_exon_max_rpkm = sample_data["next_exon_max_rpkm"]
             try:
                 percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
             except ZeroDivisionError:
@@ -1846,11 +2099,13 @@ class TINTagger(tk.Tk):
             # Draw intron #
             ###############
             # Get RPKM values for the intron
-            sample_rpkm_data = main_exon_rpkm_data[sample_name]
-            combined_rpkm = sample_rpkm_data["combined_rpkm"]
-            max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            #sample_rpkm_data = main_exon_rpkm_data[sample_name]
+            #combined_rpkm = sample_rpkm_data["combined_rpkm"]
+            #max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            avg_rpkm = sample_data["avg_rpkm"]
+            max_avg_rpkm = sample_data["max_avg_rpkm"]
             try:
-                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+                percent_of_max_rpkm = (float(avg_rpkm) / float(max_avg_rpkm)) * 100
             except ZeroDivisionError:
                 percent_of_max_rpkm = 0
 
@@ -1871,7 +2126,7 @@ class TINTagger(tk.Tk):
             row_canvas.create_text(
                 main_exon_text_start_x + 1,
                 upstream_exon_text_start_y + 1,
-                text="%.1f" % combined_rpkm,
+                text="%.1f" % avg_rpkm,
                 font=self.canvas_font,
                 fill=COLOR_CANVAS_TEXT_SHADOW,
                 tags=TEXTTAG_SHADOW
@@ -1879,18 +2134,22 @@ class TINTagger(tk.Tk):
             row_canvas.create_text(
                 main_exon_text_start_x,
                 upstream_exon_text_start_y,
-                text="%.1f" % combined_rpkm,
+                text="%.1f" % avg_rpkm,
                 font=self.canvas_font,
                 fill=COLOR_CANVAS_TEXT,
                 tags=TEXTTAG_COVERAGE
             )
 
             # Draw PSI for main exon (retained intron)
-            if main_exon_psi_data[sample_name]["is_reported"]:
-                sample_psi_data = main_exon_psi_data[sample_name]
-                sample_psi = sample_psi_data["psi"]
-                sample_included_counts = sample_psi_data["included_counts"]
-                sample_excluded_counts = sample_psi_data["excluded_counts"]
+            #if main_exon_psi_data[sample_name]["is_reported"]:
+            if sample_data["is_reported"]:
+                #sample_psi_data = main_exon_psi_data[sample_name]
+                #sample_psi = sample_psi_data["psi"]
+                sample_psi = sample_data["psi"]
+                #sample_included_counts = sample_psi_data["included_counts"]
+                sample_included_counts = sample_data["included_counts"]
+                #sample_excluded_counts = sample_psi_data["excluded_counts"]
+                sample_excluded_counts = sample_data["excluded_counts"]
                 psi_text_start_y = exon_start_y
                 psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
                 row_canvas.create_text(main_exon_text_start_x, psi_text_start_y, text=psi_text, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
@@ -1965,9 +2224,9 @@ class TINTagger(tk.Tk):
         as_id = data["as_id"]
 
         # Get rpkm/tot_reads for flanking exons
-        flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
-        main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
-        main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
+        #flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
+        #main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
+        #main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
 
         # Iterate samples
         for sample_name in sorted(data["samples"].keys(), key=natural_sort_key):
@@ -2013,8 +2272,10 @@ class TINTagger(tk.Tk):
             # Draw upstream exon #
             ######################
             # Get RPKM values
-            upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
-            upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            #upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
+            #upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            upstream_exon_rpkm = sample_data["prev_exon_rpkm"]
+            upstream_exon_max_rpkm = sample_data["prev_exon_max_rpkm"]
             try:
                 percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
             except ZeroDivisionError:
@@ -2040,11 +2301,13 @@ class TINTagger(tk.Tk):
             # Draw main exon #
             ##################
             # Get RPKM values
-            sample_rpkm_data = main_exon_rpkm_data[sample_name]
-            combined_rpkm = sample_rpkm_data["combined_rpkm"]
-            max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            #sample_rpkm_data = main_exon_rpkm_data[sample_name]
+            #combined_rpkm = sample_rpkm_data["combined_rpkm"]
+            #max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            avg_rpkm = sample_data["avg_rpkm"]
+            max_avg_rpkm = sample_data["max_avg_rpkm"]
             try:
-                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+                percent_of_max_rpkm = (float(avg_rpkm) / float(max_avg_rpkm)) * 100
             except ZeroDivisionError:
                 percent_of_max_rpkm = 0
 
@@ -2061,23 +2324,19 @@ class TINTagger(tk.Tk):
 
             # Draw rpkm text
             main_exon_text_start_x = main_exon_start_x + (main_exon_width / 2)
-            row_canvas.create_text(main_exon_text_start_x + 1, upstream_exon_text_start_y + 1, text="%.1f" % combined_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
-            row_canvas.create_text(main_exon_text_start_x, upstream_exon_text_start_y, text="%.1f" % combined_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
+            row_canvas.create_text(main_exon_text_start_x + 1, upstream_exon_text_start_y + 1, text="%.1f" % avg_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
+            row_canvas.create_text(main_exon_text_start_x, upstream_exon_text_start_y, text="%.1f" % avg_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
 
             # Get PSI values
-            if not main_exon_psi_data[sample_name]["is_reported"]:
-                # No data for this sample
-                sample_psi = -1
-                sample_excluded_counts = -1
-                sample_included_counts = -1
-            else:
-                sample_psi_data = main_exon_psi_data[sample_name]
-                sample_psi = sample_psi_data["psi"]
-                sample_included_counts = sample_psi_data["included_counts"]
-                sample_excluded_counts = sample_psi_data["excluded_counts"]
-
-            # Draw PSI text
-            if main_exon_psi_data[sample_name]["is_reported"]:
+            #if not main_exon_psi_data[sample_name]["is_reported"]:
+            if sample_data["is_reported"]:
+                #sample_psi_data = main_exon_psi_data[sample_name]
+                #sample_psi = sample_psi_data["psi"]
+                sample_psi = sample_data["psi"]
+                #sample_included_counts = sample_psi_data["included_counts"]
+                sample_included_counts = sample_data["included_counts"]
+                #sample_excluded_counts = sample_psi_data["excluded_counts"]
+                sample_excluded_counts = sample_data["excluded_counts"]
                 psi_text_start_y = upstream_exon_text_start_y - 30
                 psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
                 row_canvas.create_text(main_exon_text_start_x, psi_text_start_y, text=psi_text, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
@@ -2086,8 +2345,10 @@ class TINTagger(tk.Tk):
             # Draw downstream exon #
             ########################
             # Get RPKM values
-            downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
-            downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            #downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
+            #downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            downstream_exon_rpkm = sample_data["next_exon_rpkm"]
+            downstream_exon_max_rpkm = sample_data["next_exon_max_rpkm"]
             try:
                 percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
             except ZeroDivisionError:
@@ -2170,9 +2431,9 @@ class TINTagger(tk.Tk):
         as_id = data["as_id"]
 
         # Get expression values for flanking exons and main exon
-        flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
-        main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
-        main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
+        #flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
+        #main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
+        #main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
 
         # Iterate and draw samples
         for sample_name in sample_names_sorted:
@@ -2211,8 +2472,10 @@ class TINTagger(tk.Tk):
             # Draw upstream exon #
             ######################
             # Get RPKM values
-            upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
-            upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            #upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
+            #upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            upstream_exon_rpkm = sample_data["prev_exon_rpkm"]
+            upstream_exon_max_rpkm = sample_data["prev_exon_max_rpkm"]
             try:
                 percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
             except ZeroDivisionError:
@@ -2235,11 +2498,13 @@ class TINTagger(tk.Tk):
             # Draw main exon #
             ##################
             # Get RPKM values
-            sample_rpkm_data = main_exon_rpkm_data[sample_name]
-            combined_rpkm = sample_rpkm_data["combined_rpkm"]
-            max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            #sample_rpkm_data = main_exon_rpkm_data[sample_name]
+            #combined_rpkm = sample_rpkm_data["combined_rpkm"]
+            #max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            avg_rpkm = sample_data["avg_rpkm"]
+            max_avg_rpkm = sample_data["max_avg_rpkm"]
             try:
-                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+                percent_of_max_rpkm = (float(avg_rpkm) / float(max_avg_rpkm)) * 100
             except ZeroDivisionError:
                 percent_of_max_rpkm = 0
             # Dimensions
@@ -2251,14 +2516,18 @@ class TINTagger(tk.Tk):
             row_canvas.create_rectangle(main_exon_start_x, fill_start_y, main_exon_start_x + main_exon_width, fill_end_y, fill=exon_color, outline=exon_bordercolor)
             # Draw RPKM text
             main_exon_text_start_x = main_exon_start_x + (main_exon_width / 2)
-            row_canvas.create_text(main_exon_text_start_x + 1, text_start_y + 1, text="%.1f" % combined_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
-            row_canvas.create_text(main_exon_text_start_x, text_start_y, text="%.1f" % combined_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
+            row_canvas.create_text(main_exon_text_start_x + 1, text_start_y + 1, text="%.1f" % avg_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
+            row_canvas.create_text(main_exon_text_start_x, text_start_y, text="%.1f" % avg_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
             # Get and draw PSI text
-            if main_exon_psi_data[sample_name]["is_reported"]:
-                sample_psi_data = main_exon_psi_data[sample_name]
-                sample_psi = sample_psi_data["psi"]
-                sample_included_counts = sample_psi_data["included_counts"]
-                sample_excluded_counts = sample_psi_data["excluded_counts"]
+            #if main_exon_psi_data[sample_name]["is_reported"]:
+            if sample_data["is_reported"]:
+                #sample_psi_data = main_exon_psi_data[sample_name]
+                #sample_psi = sample_psi_data["psi"]
+                sample_psi = sample_data["psi"]
+                #sample_included_counts = sample_psi_data["included_counts"]
+                sample_included_counts = sample_data["included_counts"]
+                #sample_excluded_counts = sample_psi_data["excluded_counts"]
+                sample_excluded_counts = sample_data["excluded_counts"]
                 psi_text_start_y = text_start_y - 30
                 psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
                 row_canvas.create_text(main_exon_text_start_x, psi_text_start_y, text=psi_text, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
@@ -2266,8 +2535,10 @@ class TINTagger(tk.Tk):
             ########################
             # Draw downstream exon #
             ########################
-            downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
-            downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            #downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
+            #downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            downstream_exon_rpkm = sample_data["next_exon_rpkm"]
+            downstream_exon_max_rpkm = sample_data["next_exon_max_rpkm"]
             try:
                 percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
             except ZeroDivisionError:
@@ -2352,8 +2623,8 @@ class TINTagger(tk.Tk):
         # Get data
         sample_names_sorted = sorted(data["samples"].keys(), key=natural_sort_key)
         as_id = data["as_id"]
-        main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
-        main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
+        #main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
+        #main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
 
         # Iterate and draw samples
         for sample_name in sample_names_sorted:
@@ -2408,11 +2679,13 @@ class TINTagger(tk.Tk):
             )
 
             # Get RPKM values
-            sample_rpkm_data = main_exon_rpkm_data[sample_name]
-            combined_rpkm = sample_rpkm_data["combined_rpkm"]
-            max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            #sample_rpkm_data = main_exon_rpkm_data[sample_name]
+            #combined_rpkm = sample_rpkm_data["combined_rpkm"]
+            #max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            avg_rpkm = sample_data["avg_rpkm"]
+            max_avg_rpkm = sample_data["max_avg_rpkm"]
             try:
-                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+                percent_of_max_rpkm = (float(avg_rpkm) / float(max_avg_rpkm)) * 100
             except ZeroDivisionError:
                 percent_of_max_rpkm = 0
 
@@ -2438,15 +2711,19 @@ class TINTagger(tk.Tk):
             # Draw RPKM text
             main_exon_text_start_x = one_x + (exon_width / 2)
             main_exon_text_start_y = two_y - 10
-            row_canvas.create_text(main_exon_text_start_x + 1, main_exon_text_start_y + 1, text="%.1f" % combined_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
-            row_canvas.create_text(main_exon_text_start_x, main_exon_text_start_y, text="%.1f" % combined_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
+            row_canvas.create_text(main_exon_text_start_x + 1, main_exon_text_start_y + 1, text="%.1f" % avg_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
+            row_canvas.create_text(main_exon_text_start_x, main_exon_text_start_y, text="%.1f" % avg_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
 
             # Get PSI values
-            if main_exon_psi_data[sample_name]["is_reported"]:
-                sample_psi_data = main_exon_psi_data[sample_name]
-                sample_psi = sample_psi_data["psi"]
-                sample_included_counts = sample_psi_data["included_counts"]
-                sample_excluded_counts = sample_psi_data["excluded_counts"]
+            #if main_exon_psi_data[sample_name]["is_reported"]:
+            if sample_data["is_reported"]:
+                #sample_psi_data = main_exon_psi_data[sample_name]
+                #sample_psi = sample_psi_data["psi"]
+                sample_psi = sample_data["psi"]
+                #sample_included_counts = sample_psi_data["included_counts"]
+                sample_included_counts = sample_data["included_counts"]
+                #sample_excluded_counts = sample_psi_data["excluded_counts"]
+                sample_excluded_counts = sample_data["excluded_counts"]
                 psi_text_start_y = main_exon_text_start_y - 30
                 psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
                 row_canvas.create_text(main_exon_text_start_x + 1, psi_text_start_y + 1, text=psi_text, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
@@ -2518,8 +2795,8 @@ class TINTagger(tk.Tk):
         # Get data
         sample_names_sorted = sorted(data["samples"].keys(), key=natural_sort_key)
         as_id = data["as_id"]
-        main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
-        main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
+        #main_exon_rpkm_data = self.data_processor.get_main_exon_rpkm_by_asid(sample_names_sorted, as_id)
+        #main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
 
         ##################################
         # Iterate samples and draw exons #
@@ -2573,11 +2850,13 @@ class TINTagger(tk.Tk):
             )
 
             # Get RPKM values
-            sample_rpkm_data = main_exon_rpkm_data[sample_name]
-            combined_rpkm = sample_rpkm_data["combined_rpkm"]
-            max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            #sample_rpkm_data = main_exon_rpkm_data[sample_name]
+            #combined_rpkm = sample_rpkm_data["combined_rpkm"]
+            #max_combined_rpkm = sample_rpkm_data["max_combined_rpkm"]
+            avg_rpkm = sample_data["avg_rpkm"]
+            max_avg_rpkm = sample_data["max_avg_rpkm"]
             try:
-                percent_of_max_rpkm = (float(combined_rpkm) / float(max_combined_rpkm)) * 100
+                percent_of_max_rpkm = (float(avg_rpkm) / float(max_avg_rpkm)) * 100
             except ZeroDivisionError:
                 percent_of_max_rpkm = 0
 
@@ -2603,15 +2882,19 @@ class TINTagger(tk.Tk):
             # Draw RPKM text
             main_exon_text_start_x = eight_x + (exon_width / 2)
             main_exon_text_start_y = two_y - 10
-            row_canvas.create_text(main_exon_text_start_x + 1, main_exon_text_start_y + 1, text="%.1f" % combined_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
-            row_canvas.create_text(main_exon_text_start_x, main_exon_text_start_y, text="%.1f" % combined_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
+            row_canvas.create_text(main_exon_text_start_x + 1, main_exon_text_start_y + 1, text="%.1f" % avg_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
+            row_canvas.create_text(main_exon_text_start_x, main_exon_text_start_y, text="%.1f" % avg_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
 
             # Get PSI values
-            if main_exon_psi_data[sample_name]["is_reported"]:
-                sample_psi_data = main_exon_psi_data[sample_name]
-                sample_psi = sample_psi_data["psi"]
-                sample_included_counts = sample_psi_data["included_counts"]
-                sample_excluded_counts = sample_psi_data["excluded_counts"]
+            #if main_exon_psi_data[sample_name]["is_reported"]:
+            if sample_data["is_reported"]:
+                #sample_psi_data = main_exon_psi_data[sample_name]
+                #sample_psi = sample_psi_data["psi"]
+                sample_psi = sample_data["psi"]
+                #sample_included_counts = sample_psi_data["included_counts"]
+                sample_included_counts = sample_data["included_counts"]
+                #sample_excluded_counts = sample_psi_data["excluded_counts"]
+                sample_excluded_counts = sample_data["excluded_counts"]
                 psi_text_start_y = main_exon_text_start_y - 30
                 psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
                 row_canvas.create_text(main_exon_text_start_x + 1, psi_text_start_y + 1, text=psi_text, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
@@ -2673,9 +2956,9 @@ class TINTagger(tk.Tk):
         prev_exon_id = data["prev_exon_id"]
         next_exon_id = data["next_exon_id"]
         # Get expression values for flanking exons and main exons
-        flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
+        #flanking_exons_data = self.data_processor.get_flanking_exons_rpkm_by_exon_ids(sample_names_sorted, prev_exon_id, next_exon_id)
         main_exon_rpkm_data = self.data_processor.get_rpkm_for_mutually_exclusive_exons(sample_names_sorted, as_id)
-        main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
+        #main_exon_psi_data = self.data_processor.get_main_exon_psi_by_asid(sample_names_sorted, as_id)
 
         ##################################
         # Iterate samples and draw exons #
@@ -2713,8 +2996,10 @@ class TINTagger(tk.Tk):
             # Draw upstream exon #
             ######################
             upstream_exon_start_x = exon_padding
-            upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
-            upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            #upstream_exon_rpkm = flanking_exons_data[sample_name][prev_exon_id]["rpkm"]
+            #upstream_exon_max_rpkm = flanking_exons_data[sample_name][prev_exon_id]["max_rpkm"]
+            upstream_exon_rpkm = sample_data["prev_exon_rpkm"]
+            upstream_exon_max_rpkm = sample_data["prev_exon_max_rpkm"]
             try:
                 upstream_percent_of_max_rpkm = (float(upstream_exon_rpkm) / float(upstream_exon_max_rpkm)) * 100
             except ZeroDivisionError:
@@ -2754,11 +3039,15 @@ class TINTagger(tk.Tk):
             row_canvas.create_text(first_main_exon_text_start_x + 1, text_start_y + 1, text="%.1f" % first_main_exon_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
             row_canvas.create_text(first_main_exon_text_start_x, text_start_y, text="%.1f" % first_main_exon_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
             # Draw PSI values
-            if main_exon_psi_data[sample_name]["is_reported"]:
-                sample_psi_data = main_exon_psi_data[sample_name]
-                sample_psi = sample_psi_data["psi"]
-                sample_included_counts = sample_psi_data["included_counts"]
-                sample_excluded_counts = sample_psi_data["excluded_counts"]
+            #if main_exon_psi_data[sample_name]["is_reported"]:
+            if sample_data["is_reported"]:
+                #sample_psi_data = main_exon_psi_data[sample_name]
+                #sample_psi = sample_psi_data["psi"]
+                sample_psi = sample_data["psi"]
+                #sample_included_counts = sample_psi_data["included_counts"]
+                sample_included_counts = sample_data["included_counts"]
+                #sample_excluded_counts = sample_psi_data["excluded_counts"]
+                sample_excluded_counts = sample_data["excluded_counts"]
                 psi_text_start_y = exon_start_y - 10
                 psi_text = "PSI: %.2f (%d/%d)" % (sample_psi, sample_included_counts, sample_excluded_counts)
                 row_canvas.create_text(first_main_exon_text_start_x, psi_text_start_y, text=psi_text, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW)
@@ -2791,8 +3080,10 @@ class TINTagger(tk.Tk):
             # Draw downstream exon #
             ########################
             downstream_exon_start_x = second_main_exon_end_x + (exon_padding * 2)
-            downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
-            downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            #downstream_exon_rpkm = flanking_exons_data[sample_name][next_exon_id]["rpkm"]
+            #downstream_exon_max_rpkm = flanking_exons_data[sample_name][next_exon_id]["max_rpkm"]
+            downstream_exon_rpkm = sample_data["next_exon_rpkm"]
+            downstream_exon_max_rpkm = sample_data["next_exon_max_rpkm"]
             try:
                 downstream_percent_of_max_rpkm = (float(downstream_exon_rpkm) / float(downstream_exon_max_rpkm)) * 100
             except ZeroDivisionError:
@@ -2818,21 +3109,35 @@ class TINTagger(tk.Tk):
         self.exon_frame.columnconfigure(0, weight=1)
 
 if __name__ == "__main__":
-    # Create and run app
-    app = TINTagger()
-    app.wm_title("TIN-Tagger")
-    screen_width = app.winfo_screenwidth()
-    screen_height = app.winfo_screenheight()
-    # Fill 80% of screen
-    new_width = int((float(screen_width) / 100.00) * 80)
-    new_height = int((float(screen_height) / 100.00) * 80)
-    app.geometry("%dx%d" % (new_width, new_height))
-    #app.withdraw()
-    app.center_window(app)
-    #app.update()
-    #app.deiconify()
-    #app.geometry("1024x576")
+    from pycallgraph import PyCallGraph
+    from pycallgraph.output import GraphvizOutput
+    from pycallgraph import Config
+    from pycallgraph import GlobbingFilter
 
-    app.mainloop()
+    # Exclude Pandas-functions from output
+    config = Config()
+    config.trace_filter = GlobbingFilter(exclude=[
+        "pycallgraph.*",
+        "pandas.*",
+        "numpy.*"
+    ])
+
+    with PyCallGraph(output=GraphvizOutput(), config=config):
+        # Create and run app
+        app = TINTagger()
+        app.wm_title("TIN-Tagger")
+        screen_width = app.winfo_screenwidth()
+        screen_height = app.winfo_screenheight()
+        # Fill 80% of screen
+        new_width = int((float(screen_width) / 100.00) * 80)
+        new_height = int((float(screen_height) / 100.00) * 80)
+        app.geometry("%dx%d" % (new_width, new_height))
+        #app.withdraw()
+        app.center_window(app)
+        #app.update()
+        #app.deiconify()
+        #app.geometry("1024x576")
+
+        app.mainloop()
 
 

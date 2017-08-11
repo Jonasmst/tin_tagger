@@ -4,14 +4,18 @@ import os
 import json
 import random
 import MySQLdb as mysql
+import numpy as np
+from TINLearner import TINLearner
 
-# TODO: Check that label "event_tag" is present in the dataset. If not, create one and set all to default (-1)
-# TODO: Deprecate samtools for now
 # TODO: Max 2 decimals on exon coverage values
 # TODO: Test the relative differences between exons when using SAMtools and DB RPKM.
 # - Are the relative differences the same? Otherwise, which one should we use?
 
 TAG_NO_TAG = -1
+
+# Fix pandas print width
+pd.set_option("display.width", 250)
+pd.set_option("max.columns", 100)
 
 
 class TINDataProcessor(object):
@@ -25,9 +29,12 @@ class TINDataProcessor(object):
             self.tin_tagger.set_statusbar_text("Hello from the DataProcessor!")
             self.db = mysql.connect("localhost", "crc_spliceseq", "TODO:insert_password_here", "crc_spliceseq")
 
+        self.tin_learner = TINLearner(self)
+        self.enable_decision_tree = True
+
         self.samtools_enabled = False  # Flag to determine whether or not to use SAMtools. For testing.
 
-    def load_dataset(self, filepath):
+    def load_dataset(self, filepath, processQueue):
         """
         Reads a dataset and returns it as a pandas dataframe
         """
@@ -57,6 +64,20 @@ class TINDataProcessor(object):
             "last_exon_in_splice": "object",
             "first_exon_start": "int",
             "last_exon_stop": "int",
+            "prev_exon_name": "object",
+            "next_exon_name": "object",
+            "prev_exon_chr_start": "int",
+            "next_exon_chr_start": "int",
+            "event_tag": "int",
+            "avg_rpkm": "float",
+            "max_avg_rpkm": "float",
+            "prev_exon_rpkm": "float",
+            "prev_exon_max_rpkm": "float",
+            "next_exon_rpkm": "float",
+            "next_exon_max_rpkm": "float",
+            "max_gene_rpkm": "float",
+            "prev_exon_tot_reads": "int",
+            "next_exon_tot_reads": "int"
             #"prev_exon_stop": "int",
             #"prev_exon_start": "int",
             #"next_exon_start": "int",
@@ -75,12 +96,8 @@ class TINDataProcessor(object):
         df = pd.read_csv(filepath, dtype=datatypes, sep=delimiter)
 
         # Trim .0 from exon names
-        df.exon1 = df.exon1.str.replace("\.0$", "")
-        df.exon2 = df.exon2.str.replace("\.0$", "")
-
-        # TODO: Don't do this; return full dataset
-        #df = df.loc[df.splice_type == "ME"]
-        print "Length of dataset:", len(df)
+        #df.exon1 = df.exon1.str.replace("\.0$", "")
+        #df.exon2 = df.exon2.str.replace("\.0$", "")
 
         # Count occurrences if not already done
         if "occurrences" not in list(df.columns):
@@ -90,10 +107,19 @@ class TINDataProcessor(object):
         if "event_tag" not in list(df.columns):
             df["event_tag"] = TAG_NO_TAG  # Default to no tag
 
-        # Find the first and last as_id
-        all_as_ids = sorted(list(df["as_id"].unique()))
+        # Calc max RPKM for prev exon
+        df["prev_exon_max_rpkm"] = df.groupby("as_id")["prev_exon_rpkm"].transform(max)
 
-        return df, all_as_ids
+        # Calc max RPKM for next exon
+        df["next_exon_max_rpkm"] = df.groupby("as_id")["next_exon_rpkm"].transform(max)
+
+        # Calc max average RPKM for main exon
+        df["max_avg_rpkm"] = df.groupby("as_id")["avg_rpkm"].transform(max)
+
+        # Calc max gene RPKM
+        df["max_gene_rpkm"] = df.groupby("as_id")["rpkm"].transform(max)
+
+        processQueue.put(df)
 
     def filter_dataset(self, dataset, filters):
         """
@@ -171,54 +197,6 @@ class TINDataProcessor(object):
         sample_tag = row["event_tag"].iloc[0]
         return sample_tag
 
-    def get_gene_rpkm_by_sample_name(self, sample_name, gene_symbol, dataset):
-        """
-        Returns the gene RPKM value for a given gene in a given sample.
-        """
-        try:
-            gene_rpkm = dataset.loc[(dataset["symbol"] == gene_symbol) & (dataset["name"] == sample_name)]["rpkm"].iloc[0]
-            return gene_rpkm
-        except IndexError:
-            # Data not found for this sample/gene
-            return 0.0
-
-    def get_samtools_coverage_by_coordinates(self, coordinates, bam_file_path, testing):
-        """
-        Runs samtools depth -r on a BAM-file to find the average number of reads covering a region. Returns the
-        average coverage. The param 'testing' indicates whether or not the program is run for testing purposes
-        (e.g. outside of the TSD firewall where BAM-files are not available) or not. For usual operation, 'testing' is
-        false.
-        """
-        if testing:
-            return random.randint(100, 2000)
-        else:
-            bam_file_path
-            command = "samtools depth -r %s %s | awk '{sum+=$3;cnt++;}END{if (cnt>0){ print sum/cnt } else print 0}'" % (coordinates, bam_file_path)
-            samtools_output = subprocess.check_output(command, shell=True)
-
-            region_coverage = -1.0
-            try:
-                region_coverage = float(samtools_output)
-            except ValueError:
-                print "ERROR: Samtools output can't be converted to float:"
-                print samtools_output
-
-            return region_coverage
-
-    def get_bam_file_paths(self):
-        """
-        Returns a dictionary where keys are sample names and values are the path to that sample's BAM-file.
-        """
-        # TODO: Read this from a file or something
-        # TODO: Should the DataProcessor take care of these paths, rather than the main app? Affects coverage-func.
-        bam_directory = "/tsd/p19/data/durable/Projects/CRC-RNA-Seq/hisat2/transcriptome"
-        bam_paths = {}
-
-        for x in range(1, 11):
-            bam_paths["sample%s" % str(x)] = os.path.join(bam_directory, "%s.sorted.bam" % str(x))
-
-        return bam_paths
-
     def get_tag_by_sample_name_and_as_id(self, sample_name, as_id, dataset):
         """
         Returns the tag for this as_id for the given sample.
@@ -244,307 +222,7 @@ class TINDataProcessor(object):
         except IndexError as e:
             print "ERROR: Can't find row index for sample %s, as_id %d. Message:\n%s" % (sample_name, as_id, e.message)
 
-    def get_main_exon_psi_by_asid(self, sample_names, as_id):
-        """
-        Queries the SpliceSeq database for PSI values for a given as_id in all samples.
-        Returns a dictionary on the form:
-        {
-            "<sample name>": {
-                "sample_id": <sample ID>,
-                "psi": <PSI>,
-                "included_counts": <included counts>,
-                "excluded_counts": <excluded_counts>
-            },
-        }
-        """
-        print "DataProcessor: get_main_exon_psi_by_asid()"
-        query = """
-        SELECT
-            a.as_id,
-            a.sample_id,
-            sample.name,
-            a.psi,
-            a.included_counts,
-            a.excluded_counts
-        FROM as_counts AS a
-        INNER JOIN sample
-            ON sample.sample_id=a.sample_id
-        WHERE
-            sample.name IN(%s)
-            AND
-             a.as_id=%d
-        """ % (",".join('"' + s + '"' for s in sample_names), as_id)
-
-        if not self.testing:
-            df = pd.read_sql_query(query, self.db)
-        else:
-            # If test-running, create dummy-data
-            df = pd.DataFrame({
-                "as_id": [71] * 10,
-                "sample_id": [3, 4, 7, 8, 9, 10, 11, 12, 13, 14],
-                "name": ["sample%s" % str(x) for x in range(1, 11)],
-                "psi": [0.044, 0.334, 0.026, 0.022, 0, 0, 0, 0, 0, 0],
-                "included_counts": [6, 6, 4, 4, 0, 0, 0, 0, 0, 0],
-                "excluded_counts": [66, 81, 79, 83, 75, 39, 66, 61, 67, 75]
-            })
-
-        # Create a formatted dictionary for the results
-        results_dict = {}
-        for sample_name in sample_names:
-            results_dict[sample_name] = {}
-            sample_df = df.loc[df["name"] == sample_name]
-
-            if sample_df.empty:
-                results_dict[sample_name]["is_reported"] = False
-            else:
-                # Add sample-specific data to results
-                results_dict[sample_name]["sample_id"] = sample_df["sample_id"].iloc[0]
-                results_dict[sample_name]["psi"] = sample_df["psi"].iloc[0]
-                results_dict[sample_name]["included_counts"] = sample_df["included_counts"].iloc[0]
-                results_dict[sample_name]["excluded_counts"] = sample_df["excluded_counts"].iloc[0]
-                results_dict[sample_name]["is_reported"] = True
-
-        return results_dict
-
-    def get_main_exon_rpkm_by_asid(self, sample_names, as_id):
-        """
-        Queries the SpliceSeq database for RPKM values for a given exon.
-        Returns a dictionary on the form:
-        {
-            "<sample name>": {
-                "combined_rpkm": <total rpkm value for all exons combined>,
-                "max_combined_rpkm": <max combined_rpkm across all samples>,
-                "exons":
-                    <exon_id>: {
-                        "rpkm": <rpkm value>,
-                        "max_rpkm": <max rpkm value>,
-                        "tot_reads": <total reads value>
-                    },
-            },
-        }
-        """
-        print "DataProcessor: get_main_exon_rpkm_by_asid"
-
-        # First, find how many (partial) exons are in this splicing events
-        if not self.testing:
-            # TODO: Handle this being empty
-            num_exons_query = "SELECT * FROM as_ref_exon WHERE as_id=%d;" % as_id
-            num_exons_result = pd.read_sql_query(num_exons_query, self.db)
-        else:
-            num_exons_result = pd.DataFrame({
-                "as_id": [as_id] * 2,
-                "exon_id": [210, 211]
-            })
-
-        affected_exon_ids = list(num_exons_result["exon_id"].unique())
-
-        query = """
-        SELECT
-            s.name,
-            s.sample_id,
-            are.as_id,
-            are.exon_id,
-            ec.tot_reads,
-            ec.rpkm
-        FROM sample AS s
-        INNER JOIN exon_counts AS ec
-            ON s.sample_id=ec.sample_id
-        INNER JOIN as_ref_exon AS are
-            ON ec.exon_id=are.exon_id
-        WHERE
-            are.as_id=%d
-            AND
-            s.name IN(%s)
-        """ % (as_id, ", ".join('"' + s + '"' for s in sample_names))
-
-        if not self.testing:
-            df = pd.read_sql_query(query, self.db)
-        else:
-            df = pd.DataFrame({
-                "name": ["sample1", "sample2", "sample3", "sample4", "sample5", "sample8", "sample9", "sample10"] + ["sample1", "sample2", "sample3", "sample4"],
-                "sample_id": [3, 4, 7, 8, 9, 12, 13, 14, 3, 4, 7, 8],
-                "as_id": [71] * 12,
-                "exon_id": [210] * 8 + [211] * 4,
-                "tot_reads": [13, 12, 7, 8, 8, 5, 7, 8, 1, 2, 4, 1],
-                "rpkm": [1.09, 0.96, 0.63, 0.58, 0.61, 0.42, 0.60, 0.66, 0.09, 0.17, 0.39, 0.07]
-            })
-
-        # If resulting dataframe is empty, create an empty DF with the correct column names so the merge still completes.
-        if df.empty:
-            df = pd.DataFrame({
-                "name": [],
-                "sample_id": [],
-                "as_id": [],
-                "exon_id": [],
-                "tot_reads": [],
-                "rpkm": []
-            })
-
-        # Rename resulting dataframe
-        final_dataframe = df
-
-        # Detect and handle unreported samples
-        # If there's not (number of samples * number of exons) rows, something's missing
-        if len(df) < (len(affected_exon_ids) * len(sample_names)):
-            # Create template DataFrame to compare to resulting dataframe, containing sample names and exon ids
-            number_of_samples = len(sample_names)
-            template_exon_ids = []
-            for exon in affected_exon_ids:
-                template_exon_ids = template_exon_ids + [exon] * len(sample_names)
-            template_df = pd.DataFrame({
-                "name": sample_names * len(affected_exon_ids),
-                "exon_id": template_exon_ids
-            })
-
-            # Merge with resulting dataframe
-            merged = template_df.merge(df, on=["name", "exon_id"], how="left")
-
-            # Forward fill as_id column
-            merged["as_id"].fillna(method="ffill", inplace=True)
-
-            # Fill rpkm and tot reads to 0
-            filled = merged.fillna(0, axis=1)
-
-            # Update dtypes that have somehow become floats
-            filled[["as_id", "sample_id", "tot_reads"]] = filled[["as_id", "sample_id", "tot_reads"]].astype(int)
-
-            final_dataframe = filled
-
-        # Create column for combined RPKM and max combined RPKM
-        final_dataframe["combined_rpkm"] = final_dataframe.groupby(["name", "exon_id"])["rpkm"].transform(sum)
-        final_dataframe["max_combined_rpkm"] = final_dataframe["combined_rpkm"].max()
-
-        # Convert output to a dictionary
-        results_dict = {}
-        max_rpkms = {}
-        for ex in affected_exon_ids:
-            max_rpkms[ex] = final_dataframe.loc[final_dataframe["exon_id"] == ex]["rpkm"].max()
-
-        for sample_name in sample_names:
-            results_dict[sample_name] = {}
-
-            # Get info about this sample
-            sample_df = final_dataframe.loc[final_dataframe["name"] == sample_name]
-            results_dict[sample_name]["combined_rpkm"] = sample_df["combined_rpkm"].iloc[0]
-            results_dict[sample_name]["max_combined_rpkm"] = sample_df["max_combined_rpkm"].iloc[0]
-
-            # Create dictionary for exons
-            results_dict[sample_name]["exons"] = {}
-
-            # Get info about all exons in this sample
-            for exon_id in affected_exon_ids:
-                exon_df = sample_df.loc[sample_df["exon_id"] == exon_id]
-                results_dict[sample_name]["exons"][exon_id] = {}
-                results_dict[sample_name]["exons"][exon_id]["rpkm"] = exon_df["rpkm"].iloc[0]
-                results_dict[sample_name]["exons"][exon_id]["max_rpkm"] = max_rpkms[exon_id]
-                results_dict[sample_name]["exons"][exon_id]["tot_reads"] = exon_df["tot_reads"].iloc[0]
-
-        #print "Main exon RPKM query resulting dictionary:"
-        #print json.dumps(results_dict, indent=4)
-
-        return results_dict
-
-    def get_flanking_exons_rpkm_by_exon_ids(self, sample_names, prev_exon_id, next_exon_id):
-        """
-        Queries the SpliceSeq database for RPKM values for the flanking exons.
-        Returns a dictionary of rpkm and tot_reads values for each exon in each sample:
-        {
-            "<sample name>": {
-                "<exon id>": {
-                    "rpkm": <rpkm_value>,
-                    "tot_reads": <tot_reads_value>
-                }
-            }
-        }
-        """
-        print "DataProcessor: get_flanking_exons_rpkm_by_exon_ids"
-
-        query = """
-        SELECT
-            s.name,
-            e.sample_id,
-            e.exon_id,
-            e.tot_reads,
-            e.rpkm
-        FROM exon_counts AS e
-        INNER JOIN sample AS s
-            ON s.sample_id=e.sample_id
-        WHERE
-            s.name IN(%s)
-            AND
-            e.exon_id IN(%s)
-        """ % (", ".join("'" + s + "'" for s in sample_names), ", ".join(str(x) for x in [prev_exon_id, next_exon_id]))
-
-        if not self.testing:
-            print "Querying database"
-            df = pd.read_sql_query(query, self.db)
-        else:
-            df = pd.DataFrame({
-                "name": ["sample%s" % str(x) for x in range(1, 11)] * 2,
-                "sample_id": [3, 4, 7, 8, 9, 10, 11, 12, 13, 14] * 2,
-                "exon_id": [prev_exon_id] * 10 + [next_exon_id] * 10,
-                "tot_reads": [118, 135, 115, 125, 133, 58, 93, 93, 106, 136, 190, 200, 181, 190, 229, 134, 133, 154, 166, 188],
-                "rpkm": [130001.3, 14.5, 14.0, 12.3, 13.6, 5.4, 12.2, 10.5, 12.3, 15.2, 16.9, 17.1, 17.5, 14.8, 18.5, 10.0, 13.8, 13.7, 15.3, 16.6]
-            })
-
-        # If resulting dataframe is empty, create an empty DF with the correct column names so the merge still completes.
-        if df.empty:
-            df = pd.DataFrame({
-                "name": [],
-                "exon_id": [],
-                "sample_id": [],
-                "tot_reads": [],
-                "rpkm": []
-            })
-
-        # Rename resulting dataframe
-        final_dataframe = df
-
-        # Detect and handle unreported samples
-        # If there's not (number of samples * number of exons) rows, something's missing
-        if len(df) < (2 * len(sample_names)):
-            # Create template DataFrame to compare to resulting dataframe, containing sample names and exon ids
-            number_of_samples = len(sample_names)
-            template_df = pd.DataFrame({
-                "name": sample_names * 2,
-                "exon_id": [prev_exon_id] * number_of_samples + [next_exon_id] * number_of_samples
-            })
-
-            # Merge template DF with result DF to produce NaNs for RPKM and tot_reads in unreported samples
-            merged_dataframe = template_df.merge(df, how="left", on=["name", "exon_id"])  # TODO: Test this
-
-            # Fill NaNs in rpkm and tot_reads columns with 0s
-            final_dataframe = merged_dataframe.fillna(0, axis=1)
-
-        # Convert output to a dictionary
-        results_dict = {}
-        # Include max RPKM for both exons
-        prev_exon_max_rpkm = final_dataframe.loc[final_dataframe["exon_id"] == prev_exon_id]["rpkm"].max()
-        next_exon_max_rpkm = final_dataframe.loc[final_dataframe["exon_id"] == next_exon_id]["rpkm"].max()
-        max_rpkms = {
-            prev_exon_id: prev_exon_max_rpkm,
-            next_exon_id: next_exon_max_rpkm
-        }
-        for sample_name in sample_names:
-            results_dict[sample_name] = {}
-
-            # Get info about this sample
-            sample_df = final_dataframe.loc[final_dataframe["name"] == sample_name]
-
-            # Get info about both exons in this sample
-            for exon_id in [prev_exon_id, next_exon_id]:
-                exon_df = sample_df.loc[sample_df["exon_id"] == exon_id]
-                results_dict[sample_name][exon_id] = {}
-                results_dict[sample_name][exon_id]["rpkm"] = exon_df["rpkm"].iloc[0]
-                results_dict[sample_name][exon_id]["tot_reads"] = exon_df["tot_reads"].iloc[0]
-                results_dict[sample_name][exon_id]["max_rpkm"] = max_rpkms[exon_id]
-
-        # print "Flanking exons RPKM/tot_reads dict:"
-        # print json.dumps(results_dict, indent=4)
-
-        return results_dict
-
-    def get_row_data(self, as_id, dataset, sample_names, bam_paths, testing):
+    def get_row_data(self, as_id, dataset, sample_names, testing):
         """
         Returns formatted data for the current row index.
         The format is as follows:
@@ -572,28 +250,17 @@ class TINDataProcessor(object):
                 }
         }
         """
-        print "DataProcessor: get_row_data()"
-        # TODO: Find included_counts and excluded_counts for other exons than the one in question
-
         # Get information
-        event_df = dataset.loc[dataset["as_id"] == as_id].iloc[0]  # Only need first row, really
-        splice_type = event_df["splice_type"]
-        gene_symbol = event_df["symbol"]
-        strand = event_df["strand"]
-        exons = event_df["exons"]
-        chrom = event_df["chr"]
-        splice_start = event_df["first_exon_start"]
-        splice_stop = event_df["last_exon_stop"]
-        if strand == "-":
-            splice_start = event_df["last_exon_stop"]
-            splice_stop = event_df["first_exon_start"]
-        prev_exon_name = event_df["exon1"]
-        next_exon_name = event_df["exon2"]
-        prev_exon_id = event_df["start_ex"]
-        next_exon_id = event_df["end_ex"]
-
-        # Create coordinates from chr, start and stop
-        coordinates = str(chrom) + ":" + str(int(splice_start)) + "-" + str(int(splice_stop))
+        event_df = dataset.loc[dataset["as_id"] == as_id]
+        splice_type = event_df["splice_type"].iloc[0]
+        gene_symbol = event_df["symbol"].iloc[0]
+        strand = event_df["strand"].iloc[0]
+        exons = event_df["exons"].iloc[0]
+        chrom = event_df["chr"].iloc[0]
+        prev_exon_name = event_df["prev_exon_name"].iloc[0]
+        next_exon_name = event_df["next_exon_name"].iloc[0]
+        prev_exon_id = event_df["start_ex"].iloc[0]
+        next_exon_id = event_df["end_ex"].iloc[0]
 
         # Try int-casting exon IDs
         try:
@@ -607,7 +274,6 @@ class TINDataProcessor(object):
         row_data = {
             "splice_type": splice_type,
             "gene_symbol": gene_symbol,
-            "location": coordinates,
             "exons": exons,
             "strand": strand,
             "as_id": as_id,
@@ -615,37 +281,71 @@ class TINDataProcessor(object):
             "next_exon_id": next_exon_id,
             "prev_exon_name": prev_exon_name,
             "next_exon_name": next_exon_name,
+            "coords": event_df["coords"].iloc[0]
         }
 
-        # Keep track of exon coverages and gene RPKMs
-        all_gene_rpkms = []
+        # TEST: Get predicted tags from decision tree
+        if self.enable_decision_tree:
+            decision_tree_tags = self.tin_learner.predict_tag_decision_tree(event_df)
+            # decision_tree_tags is either a dataframe or a boolean. Pandas throws a ValueError when checking the truth
+            # value of a dataframe, so we have to surround it with a try/catch
+            try:
+                if not decision_tree_tags:
+                    print "ERROR: Decision tree has not been fitted, yet attempted to predict value"
+            except ValueError:
+                # Result is a dataframe
+                event_df.is_copy = False  # Suppress the annoying SettingWithCopyWarning
+                event_df.loc[:, "decision_tree_tag"] = decision_tree_tags
+                # TODO: At some point include the predicted tags in the TINTagger's original dataset
+        # END TEST
 
         ########################
         # Sample-specific data #
         ########################
         samples_data = {}
         for s_name in sample_names:
+
             # Add entry for sample in the container
             if s_name not in samples_data.keys():
                 samples_data[s_name] = {}
 
-            # Find if sample is reported by SpliceSeq or not
-            is_reported = self.is_event_reported_in_sample(s_name, as_id, dataset)
-            samples_data[s_name]["is_reported"] = is_reported
-            # Default to sample not being tagged
-            sample_tag = self.tag_no_tag
-            # Default to RPKM being 0 (in case it's not reported)
-            gene_rpkm = self.get_gene_rpkm_by_sample_name(s_name, gene_symbol, dataset)
-
-            if is_reported:
-                sample_tag = self.get_sample_tag_by_as_id(s_name, as_id, dataset)
-
-            samples_data[s_name]["gene_rpkm"] = gene_rpkm
-            all_gene_rpkms.append(gene_rpkm)
-            samples_data[s_name]["event_tag"] = sample_tag
+            try:
+                # Get row for this sample
+                sample_row = dataset.loc[(dataset["as_id"] == as_id) & (dataset["name"] == s_name)].iloc[0]
+                # Find if sample is reported by SpliceSeq or not
+                samples_data[s_name]["is_reported"] = self.is_event_reported_in_sample(s_name, as_id, dataset)
+                samples_data[s_name]["gene_rpkm"] = sample_row["rpkm"]
+                samples_data[s_name]["max_gene_rpkm"] = sample_row["max_gene_rpkm"]
+                samples_data[s_name]["event_tag"] = sample_row["event_tag"]
+                samples_data[s_name]["prev_exon_rpkm"] = sample_row["prev_exon_rpkm"]
+                samples_data[s_name]["prev_exon_max_rpkm"] = sample_row["prev_exon_max_rpkm"]
+                samples_data[s_name]["next_exon_rpkm"] = sample_row["next_exon_rpkm"]
+                samples_data[s_name]["next_exon_max_rpkm"] = sample_row["next_exon_max_rpkm"]
+                samples_data[s_name]["avg_rpkm"] = sample_row["avg_rpkm"]
+                samples_data[s_name]["max_avg_rpkm"] = sample_row["max_avg_rpkm"]
+                samples_data[s_name]["psi"] = sample_row["psi"]
+                samples_data[s_name]["included_counts"] = sample_row["included_counts"]
+                samples_data[s_name]["excluded_counts"] = sample_row["excluded_counts"]
+                samples_data[s_name]["max_gene_rpkm"] = sample_row["max_gene_rpkm"]
+                samples_data[s_name]["decision_tree_prediction"] = sample_row["decision_tree_tag"]
+            except IndexError:
+                # Sample not present, fill with "blanks"
+                samples_data[s_name]["is_reported"] = False
+                samples_data[s_name]["gene_rpkm"] = 0
+                samples_data[s_name]["max_gene_rpkm"] = 0
+                samples_data[s_name]["event_tag"] = -1
+                samples_data[s_name]["prev_exon_rpkm"] = 0
+                samples_data[s_name]["prev_exon_max_rpkm"] = 0
+                samples_data[s_name]["next_exon_rpkm"] = 0
+                samples_data[s_name]["next_exon_max_rpkm"] = 0
+                samples_data[s_name]["avg_rpkm"] = 0
+                samples_data[s_name]["max_avg_rpkm"] = 0
+                samples_data[s_name]["psi"] = 0
+                samples_data[s_name]["included_counts"] = 0
+                samples_data[s_name]["excluded_counts"] = 0
+                samples_data[s_name]["max_gene_rpkm"] = 0
 
         row_data["samples"] = samples_data
-        row_data["max_gene_rpkm"] = max(all_gene_rpkms)
 
         return row_data
 
@@ -769,10 +469,238 @@ class TINDataProcessor(object):
         # Finally, return the data
         return return_data
 
+    def get_dataset_from_database(self, db_url, db_user, db_pass, db_name, queue):
+        """
+        Queries the database to retrieve information about main exon PSI/RPKM and flanking exons RPKM.
+        """
+        # Connect do database
+        try:
+            self.db = mysql.connect(db_url, db_user, db_pass, db_name)
+        except mysql.OperationalError as e:
+            print "ERROR: Unable to connect to database:"
+            print e.message
+            queue.put(False)
+            return
 
+        # Sample names
+        sample_names = ["sample%s" % str(x) for x in range(1, 11)]
 
+        # Find RPKM for flanking exons
+        flanking_exons_query = """
+        SELECT \
+            sample.name, sample.sample_id, \
+            ex1.exon_name AS prev_exon_name, ex1.chr_start AS prev_exon_chr_start, ex1.chr_stop AS prev_exon_chr_stop, \
+            ex2.exon_name AS next_exon_name, ex2.chr_start AS next_exon_chr_start, ex2.chr_stop AS next_exon_chr_stop, \
+            ar.as_id, ar.splice_type, ar.exons, \
+            ec1.tot_reads AS prev_exon_tot_reads, ec1.rpkm AS prev_exon_rpkm, \
+            ec2.tot_reads AS next_exon_tot_reads, ec2.rpkm AS next_exon_rpkm \
+        FROM \
+            sample \
+            INNER JOIN as_counts ON as_counts.sample_id=sample.sample_id \
+            INNER JOIN as_ref AS ar ON ar.as_id=as_counts.as_id \
+            INNER JOIN exon AS ex1 ON ar.start_ex=ex1.exon_id \
+            INNER JOIN exon AS ex2 ON ar.end_ex=ex2.exon_id \
+            LEFT JOIN exon_counts AS ec1 ON (ar.start_ex=ec1.exon_id AND sample.sample_id=ec1.sample_id) \
+            LEFT JOIN exon_counts AS ec2 ON (ar.end_ex=ec2.exon_id AND sample.sample_id=ec2.sample_id)
+        WHERE \
+            sample.name IN(%s)
+        """ % (",".join('"' + s + '"' for s in sample_names))
+        self.tin_tagger.set_statusbar_text("Querying for flanking exons RPKM")
+        flanking_exons_df = pd.read_sql_query(flanking_exons_query, self.db)
 
+        # Find PSI and included/excluded counts for main exon
+        main_exon_query = """
+        SELECT \
+            sample.name, sample.sample_id, \
+            ac.as_id, ac.psi, ac.included_counts, ac.excluded_counts, \
+            ar.splice_type, ar.start_ex, ar.end_ex, ar.novel_splice, ar.exons, \
+            g.graph_id, g.symbol, g.chr, g.strand, \
+            gc.rpkm
+        FROM
+            sample \
+            INNER JOIN as_counts AS ac ON ac.sample_id=sample.sample_id \
+            INNER JOIN as_ref AS ar ON ar.as_id=ac.as_id \
+            INNER JOIN graph AS g ON g.graph_id=ar.graph_id \
+            INNER JOIN gene_counts AS gc ON gc.graph_id=ar.graph_id AND gc.sample_id=sample.sample_id \
+        WHERE \
+            sample.name IN(%s)
+        """ % (",".join('"' + s + '"' for s in sample_names))
 
+        print "\nQuerying for main exon"
+        self.tin_tagger.set_statusbar_text("Querying for main exon PSI")
+        main_exon_df = pd.read_sql_query(main_exon_query, self.db)
+
+        # Merge flanking exons data and main exons data together into a single dataset
+        merged_df = main_exon_df.merge(flanking_exons_df, on=["sample_id", "as_id", "name", "exons", "splice_type"], how="outer")
+
+        # Find average RPKM for every exon in the main exon(s)
+        main_exon_rpkm_query = """
+        SELECT \
+            sample.sample_id, sample.name, \
+            as_counts.as_id, as_ref_exon.exon_id, \
+            exon_counts.rpkm, exon_counts.tot_reads, \
+            exon.exon_name, exon.chr_start, exon.chr_stop
+        FROM sample \
+            INNER JOIN as_counts ON as_counts.sample_id=sample.sample_id \
+            INNER JOIN as_ref ON as_ref.as_id=as_counts.as_id \
+            INNER JOIN as_ref_exon ON as_ref_exon.as_id=as_ref.as_id \
+            LEFT JOIN exon_counts ON exon_counts.sample_id=sample.sample_id AND exon_counts.exon_id=as_ref_exon.exon_id \
+            LEFT JOIN exon ON exon.exon_id=as_ref_exon.exon_id AND exon.graph_id=as_ref.graph_id
+        WHERE \
+            sample.name IN(%s);
+        """ % (",".join('"' + s + '"' for s in sample_names))
+        self.tin_tagger.set_statusbar_text("Querying for main exon RPKM")
+        main_exon_rpkm_df = pd.read_sql_query(main_exon_rpkm_query, self.db)
+        # Replace NaNs with 0 (IGV-lookup shows that non-reported RPKMs is due to zero read count)
+        main_exon_rpkm_df["rpkm"].fillna(0, inplace=True)
+        # Calc average RPKM for all main exons in each sample
+        main_exon_rpkm_df["avg_rpkm"] = main_exon_rpkm_df.groupby(["as_id", "name"])["rpkm"].transform("mean")
+        # Replace NaNs of tot_reads with 0
+        main_exon_rpkm_df["tot_reads"].fillna(0, inplace=True)
+        # Calc average total reads for all main exons in each sample
+        main_exon_rpkm_df["avg_tot_reads"] = main_exon_rpkm_df.groupby(["as_id", "name"])["rpkm"].transform("mean")
+
+        # Remove duplicates of as_id and name (otherwise we'll have one identical entry per exon name in the main exon)
+        self.tin_tagger.set_statusbar_text("Removing duplicates..")
+        main_exon_rpkm_deduped = main_exon_rpkm_df.drop_duplicates(["as_id", "name"])[["sample_id", "name", "as_id", "avg_rpkm", "chr_start", "chr_stop", "tot_reads", "avg_tot_reads"]]
+
+        self.tin_tagger.set_statusbar_text("Merging datasets..")
+        # Merge together datasets to include average RPKM for main exon
+        unprocessed_final = merged_df.merge(main_exon_rpkm_deduped, on=["name", "sample_id", "as_id"], how="inner")
+
+        # Drop NaNs in prev_exon_tot_reads, prev_exon_rpkm, next_exon_tot_reads, next_exon_rpkm
+        final_df = unprocessed_final.copy()
+        final_df["prev_exon_tot_reads"].fillna(0, inplace=True)
+        final_df["prev_exon_rpkm"].fillna(0, inplace=True)
+        final_df["next_exon_tot_reads"].fillna(0, inplace=True)
+        final_df["next_exon_rpkm"].fillna(0, inplace=True)
+        final_df["next_exon_chr_start"].fillna(-1, inplace=True)
+        final_df["next_exon_chr_stop"].fillna(-1, inplace=True)
+        final_df["next_exon_name"].fillna("N/A", inplace=True)
+        final_df["prev_exon_chr_start"].fillna(-1, inplace=True)
+        final_df["prev_exon_chr_stop"].fillna(-1, inplace=True)
+        final_df["prev_exon_name"].fillna("N/A", inplace=True)
+        final_df["start_ex"].fillna(-1, inplace=True)
+        final_df["end_ex"].fillna(-1, inplace=True)
+        final_df["avg_rpkm"].fillna(0, inplace=True)
+        final_df["rpkm"].fillna(0, inplace=True)
+        final_df["tot_reads"].fillna(0, inplace=True)
+        final_df["avg_tot_reads"].fillna(0, inplace=True)
+
+        # Count occurrences if not already done
+        if "occurrences" not in list(final_df.columns):
+            final_df["occurrences"] = final_df.groupby("as_id")["name"].transform(len)
+
+        # Add event_tag column if not present
+        if "event_tag" not in list(final_df.columns):
+            final_df["event_tag"] = TAG_NO_TAG  # Default to no tag
+
+        self.tin_tagger.set_statusbar_text("Finding RPKM max. values and ratios.")
+
+        # Calc max RPKM for prev exon
+        final_df["prev_exon_max_rpkm"] = final_df.groupby("as_id")["prev_exon_rpkm"].transform(max)
+
+        # Calc max RPKM for next exon
+        final_df["next_exon_max_rpkm"] = final_df.groupby("as_id")["next_exon_rpkm"].transform(max)
+
+        # Calc max average RPKM for main exon
+        final_df["max_avg_rpkm"] = final_df.groupby("as_id")["avg_rpkm"].transform(max)
+
+        # Calc max gene RPKM
+        final_df["max_gene_rpkm"] = final_df.groupby("as_id")["rpkm"].transform(max)
+
+        # TEST: Fill NaNs in max_gene_rpkm
+        final_df["max_gene_rpkm"] = final_df.groupby("as_id")["max_gene_rpkm"].transform(lambda s: s.loc[s.first_valid_index()])
+        # END TEST
+
+        # Calc max PSI
+        self.tin_tagger.set_statusbar_text("Finding PSI max. values and ratios")
+        final_df["max_psi"] = final_df.groupby("as_id")["psi"].transform(max)
+
+        # Create coords column
+        final_df["coords"] = final_df["chr"].map(str) + ":" + final_df["chr_start"].map(str) + "-" + final_df["chr_stop"].map(str)
+
+        # Datatypes
+        datatypes = {
+            "name": str,
+            "as_id": int,
+            "psi": float,
+            "included_counts": int,
+            "excluded_counts": int,
+            "splice_type": str,
+            "start_ex": int,
+            "end_ex": int,
+            "novel_splice": int,
+            "exons": str,
+            "graph_id": int,
+            "symbol": str,
+            "chr": str,
+            "strand": str,
+            "rpkm": float,
+            "prev_exon_name": str,
+            "prev_exon_chr_start": int,
+            "prev_exon_chr_stop": int,
+            "next_exon_name": str,
+            "next_exon_chr_start": int,
+            "next_exon_chr_stop": int,
+            "prev_exon_tot_reads": int,
+        }
+
+        # Convert datatypes
+        for column_name, column_type in datatypes.items():
+            final_df[column_name] = final_df[column_name].astype(column_type)
+
+        # Variables to be used for learning purposes # TODO: Division by zero errors
+        print "Assigning variables for algo learning purposes"
+        # Percent of max PSI
+        final_df["percent_of_max_psi"] = final_df["psi"] / final_df["max_psi"]
+        final_df["percent_of_max_psi"].fillna(0, inplace=True)
+        # Percent of max RPKM
+        final_df["percent_of_max_rpkm"] = final_df["avg_rpkm"] / final_df["max_avg_rpkm"]
+        final_df["percent_of_max_rpkm"].fillna(0, inplace=True)
+        # Main exon to upstream RPKM ratio
+        final_df["main_rpkm_to_upstream_rpkm_ratio"] = final_df["avg_rpkm"] / final_df["prev_exon_rpkm"]
+        final_df["main_rpkm_to_upstream_rpkm_ratio"].fillna(0, inplace=True)
+        final_df["main_rpkm_to_upstream_rpkm_ratio"] = final_df["main_rpkm_to_upstream_rpkm_ratio"].replace(np.inf, 1)
+        # Main exon to downstream RPKM ratio
+        final_df["main_rpkm_to_downstream_rpkm_ratio"] = final_df["avg_rpkm"] / final_df["next_exon_rpkm"]
+        final_df["main_rpkm_to_downstream_rpkm_ratio"].fillna(0, inplace=True)
+        final_df["main_rpkm_to_downstream_rpkm_ratio"] = final_df["main_rpkm_to_downstream_rpkm_ratio"].replace(np.inf, 1)
+
+        # PSI diff (in percentage) from mean PSI in other samples
+        final_df["sum_psi_all_samples"] = final_df.groupby("as_id")["psi"].transform(sum)
+        final_df["sum_psi_other_samples"] = final_df["sum_psi_all_samples"] - final_df["psi"]
+        final_df["mean_psi_other_samples"] = final_df["sum_psi_other_samples"] / final_df["occurrences"].astype(float) - 1
+        # For events only occurring in 1 sample, mean_psi_other_samples will be np.inf. We'll replace them with 0s and
+        # just ignore occurrences < 4 or something when training algos.
+        final_df["mean_psi_other_samples"].replace(np.inf, 0.00)
+        final_df["psi_diff_from_mean_other_samples"] = final_df["psi"] - final_df["mean_psi_other_samples"]
+
+        # RPKM diff (in percentage) from mean RPKM in other samples
+        final_df["sum_rpkm_all_samples"] = final_df.groupby("as_id")["avg_rpkm"].transform(sum)
+        final_df["sum_rpkm_other_samples"] = final_df["sum_rpkm_all_samples"] - final_df["avg_rpkm"]
+        final_df["mean_rpkm_other_samples"] = final_df["sum_rpkm_other_samples"] / final_df["occurrences"].astype(float) - 1
+        # For events only occurring in 1 sample, mean_rpkm_other_samples will be np.inf. We'll replace them with 0s and
+        # just ignore occurrences < 4 or something when training algos.
+        final_df["mean_rpkm_other_samples"].replace(np.inf, 0.00)
+        final_df["rpkm_percentage_of_mean_other_samples"] = final_df["avg_rpkm"] / final_df["mean_rpkm_other_samples"]
+        final_df["rpkm_percentage_of_mean_other_samples"].replace(np.inf, 0.00)
+        final_df["rpkm_percentage_of_mean_other_samples"].fillna(0.00)
+
+        # One-hot encode splice_type column
+        self.tin_tagger.set_statusbar_text("One-hot encoding splice type column")
+        splicetype_dummies = pd.get_dummies(final_df.splice_type, prefix="splicetype", drop_first=True)
+        final_df = pd.concat([final_df, splicetype_dummies], axis=1)
+
+        # Columns for ML assigned tags
+        final_df["decision_tree_tag"] = TAG_NO_TAG
+        final_df["random_forest_tag"] = TAG_NO_TAG
+        final_df["neural_net_tag"] = TAG_NO_TAG
+
+        self.tin_tagger.set_statusbar_text("Done fetching and preprocessing data.")
+
+        # Finally, add dataframe to queue
+        queue.put(final_df)
 
 
 
