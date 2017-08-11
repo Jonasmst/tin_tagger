@@ -224,7 +224,7 @@ class TINTagger(tk.Tk):
         self.setup_ttk_styles()
 
         # Create a menu
-        self.create_menu()
+        self.main_menu = self.create_menu()
 
         # Create main frame
         self.main_frame = self.create_main_frame()
@@ -655,11 +655,14 @@ class TINTagger(tk.Tk):
         # Add dataset menu
         # TODO: Add an "information" dataset entry that shows the number of events, number of samples, and column names
         dataset_menu = tk.Menu(main_menu)
-        main_menu.add_cascade(label="Dataset", menu=dataset_menu)
+        main_menu.add_cascade(label="Filters", menu=dataset_menu)
         dataset_menu.add_command(label="Filter dataset", command=self.show_filter_dataset_window, accelerator="Ctrl+F")
         dataset_menu.add_separator()
         dataset_menu.add_command(label="Open filters..", command=self.read_dataset_filters)
         dataset_menu.add_command(label="Save current filters", command=self.save_dataset_filters)
+
+        # Return main menu
+        return main_menu
 
     def show_options(self):
         """
@@ -1330,6 +1333,7 @@ class TINTagger(tk.Tk):
         Shows a blank UI with a prompt to open a file, also hides the sidebars
         """
         self.right_sidebar.grid_remove()
+        self.main_menu.entryconfig("Filters", state="disabled")  # Disable filters menu
         self.left_frame.grid_remove()
         self.load_frame.grid()
 
@@ -1340,6 +1344,7 @@ class TINTagger(tk.Tk):
         self.load_frame.destroy()
         self.right_sidebar.grid()
         self.left_frame.grid()
+        self.main_menu.entryconfig("Filters", state="normal")  # Enable filters menu
 
     def update_tag_information(self):
         """
