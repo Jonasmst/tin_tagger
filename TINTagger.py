@@ -1378,7 +1378,7 @@ class TINTagger(tk.Tk):
             return
         else:
             print "Saving file to %s" % filepath
-            self.dataset.to_csv(filepath, sep="\t", index=False)
+            self.original_dataset.to_csv(filepath, sep="\t", index=False)
 
     def left_arrow_clicked(self, event):
         """
@@ -1746,8 +1746,12 @@ class TINTagger(tk.Tk):
             is_reported = sample_data["is_reported"]
             sample_tag = sample_data["event_tag"]
             # TODO: Update colors depending on tag
-            decision_tree_prediction = sample_data["decision_tree_prediction"]
-            print "TINTagger got prediction <%d> for sample <%s>" % (decision_tree_prediction, sample_name)
+            try:
+                decision_tree_prediction = sample_data["decision_tree_prediction"]
+                print "TINTagger got prediction <%d> for sample <%s>" % (decision_tree_prediction, sample_name)
+            except KeyError:
+                # Decision tree tag is not set yet. Default to no tag
+                decision_tree_prediction = TAG_NO_TAG
 
             # Setup colors
             canvas_background = "white"
