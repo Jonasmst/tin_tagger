@@ -3109,20 +3109,42 @@ class TINTagger(tk.Tk):
         self.exon_frame.columnconfigure(0, weight=1)
 
 if __name__ == "__main__":
-    from pycallgraph import PyCallGraph
-    from pycallgraph.output import GraphvizOutput
-    from pycallgraph import Config
-    from pycallgraph import GlobbingFilter
 
-    # Exclude Pandas-functions from output
-    config = Config()
-    config.trace_filter = GlobbingFilter(exclude=[
-        "pycallgraph.*",
-        "pandas.*",
-        "numpy.*"
-    ])
+    # Whether or not to draw a diagram of the callstack. Slows down execution, but useful for debugging
+    enable_callgraph = False
 
-    with PyCallGraph(output=GraphvizOutput(), config=config):
+    if enable_callgraph:
+        from pycallgraph import PyCallGraph
+        from pycallgraph.output import GraphvizOutput
+        from pycallgraph import Config
+        from pycallgraph import GlobbingFilter
+
+        # Exclude Pandas-functions from output
+        config = Config()
+        config.trace_filter = GlobbingFilter(exclude=[
+            "pycallgraph.*",
+            "pandas.*",
+            "numpy.*"
+        ])
+
+        with PyCallGraph(output=GraphvizOutput(), config=config):
+            # Create and run app
+            app = TINTagger()
+            app.wm_title("TIN-Tagger")
+            screen_width = app.winfo_screenwidth()
+            screen_height = app.winfo_screenheight()
+            # Fill 80% of screen
+            new_width = int((float(screen_width) / 100.00) * 80)
+            new_height = int((float(screen_height) / 100.00) * 80)
+            app.geometry("%dx%d" % (new_width, new_height))
+            #app.withdraw()
+            app.center_window(app)
+            #app.update()
+            #app.deiconify()
+            #app.geometry("1024x576")
+
+            app.mainloop()
+    else:
         # Create and run app
         app = TINTagger()
         app.wm_title("TIN-Tagger")
@@ -3132,12 +3154,8 @@ if __name__ == "__main__":
         new_width = int((float(screen_width) / 100.00) * 80)
         new_height = int((float(screen_height) / 100.00) * 80)
         app.geometry("%dx%d" % (new_width, new_height))
-        #app.withdraw()
         app.center_window(app)
-        #app.update()
-        #app.deiconify()
-        #app.geometry("1024x576")
-
         app.mainloop()
+
 
 
