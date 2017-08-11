@@ -133,6 +133,7 @@ class ResizingCanvas(tk.Canvas):
 
 
 class TINTagger(tk.Tk):
+
     def __init__(self, *args, **kwargs):
         # Super init
         tk.Tk.__init__(self, *args, **kwargs)
@@ -388,6 +389,10 @@ class TINTagger(tk.Tk):
         # TEST: Button for training decision tree
         decision_tree_training_button = ttk.Button(sidebar_information, text="Train decision tree", command=self.train_decision_tree)
         decision_tree_training_button.grid(column=0, row=current_row, sticky="W")
+        current_row += 1
+
+        next_untagged_button = ttk.Button(sidebar_information, text="Jump to next untagged event", command=self.next_untagged_event_button_clicked)
+        next_untagged_button.grid(column=0, row=current_row, sticky="W")
         current_row += 1
         # END TEST
 
@@ -1380,6 +1385,21 @@ class TINTagger(tk.Tk):
             print "Saving file to %s" % filepath
             self.original_dataset.to_csv(filepath, sep="\t", index=False)
 
+    def next_untagged_event_button_clicked(self):
+        """
+        Find and display next untagged event.
+        """
+        # Note: self.dataset is correct, because we want to respect current filter
+        untagged_asid = self.data_processor.get_next_untagged_asid(self.current_asid, self.dataset)
+
+        if untagged_asid == self.current_asid:
+            # No untagged event found
+            self.set_statusbar_text("ERROR: No untagged events found.")
+            return
+        else:
+            self.current_asid = untagged_asid
+            self.update_information()
+
     def left_arrow_clicked(self, event):
         """
         Handles when left-arrowkey is clicked. Essentially just passes through to
@@ -1417,6 +1437,7 @@ class TINTagger(tk.Tk):
         Handles next-button presses: Update as_id and initiate reading of new row.
         """
         next_asid_index = self.all_asids.index(self.current_asid) + 1
+
         if next_asid_index >= len(self.all_asids):
             print "Woops, no more rows (reached end of dataset)"
             next_asid_index -= 1
@@ -1678,7 +1699,6 @@ class TINTagger(tk.Tk):
 
         for uninteresting_button in self.all_uninteresting_buttons:
             uninteresting_button.invoke()
-
 
     def draw_exon_skipping_event(self, data):
         """

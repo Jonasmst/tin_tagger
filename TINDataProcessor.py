@@ -197,6 +197,20 @@ class TINDataProcessor(object):
         sample_tag = row["event_tag"].iloc[0]
         return sample_tag
 
+    def get_next_untagged_asid(self, as_id, dataset):
+
+        # Find all events that are not yet tagged and get their as_ids
+        untagged = dataset.loc[dataset["event_tag"] == TAG_NO_TAG]
+        untagged_asids = sorted(list(untagged.as_id.unique()))
+
+        # Return the first untagged as_id, if any
+        if len(untagged_asids) > 0:
+            return untagged_asids[0]
+
+        # Otherwise just return the same as_id that was passed in
+        print "ERROR: No untagged events found"
+        return as_id
+
     def get_tag_by_sample_name_and_as_id(self, sample_name, as_id, dataset):
         """
         Returns the tag for this as_id for the given sample.
