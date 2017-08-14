@@ -12,6 +12,9 @@ from TINLearner import TINLearner
 # - Are the relative differences the same? Otherwise, which one should we use?
 
 TAG_NO_TAG = -1
+TAG_INTERESTING = 0
+TAG_NOT_INTERESTING = 1
+TAG_UNCERTAIN = 2
 
 # Fix pandas print width
 pd.set_option("display.width", 250)
@@ -127,33 +130,68 @@ class TINDataProcessor(object):
         Returns a Pandas DataFrame if there are datapoints in the remaining filtered dataset, otherwise returns None.
         """
 
-        min_inc_counts = filters["included_counts"]
-        min_exc_counts = filters["excluded_counts"]
-        min_psi = filters["psi"]
-        min_rpkm = filters["rpkm"]
+        # Work on a copy of the dataset
+        df = dataset.copy()
 
-        keep_splice_types = []
+        # Filter on ints
+        int_fields = ["included_counts", "excluded_counts", "tot_reads", "occurrences"]
+        for i in int_fields:
+            df = df.loc[df[i] >= int(filters[i][1].get())]
 
-        # Find which splice types are marked to be included
-        for name, info in filters["splice_type"].items():
-            if info["enabled_var"] == 1:
-                keep_splice_types.append(name)
-
-        # Filter
-        filtered_dataset = dataset.loc[
-            (dataset["included_counts"] >= min_inc_counts) &
-            (dataset["excluded_counts"] >= min_exc_counts) &
-            (dataset["psi"] >= min_psi) &
-            (dataset["rpkm"] >= min_rpkm)
+        # Filter float fields
+        float_fields = [
+            "psi",
+            "rpkm",
+            "avg_rpkm",
+            "prev_exon_tot_reads",
+            "prev_exon_rpkm",
+            "next_exon_tot_reads",
+            "next_exon_rpkm",
+            "avg_tot_reads",
+            "prev_exon_max_rpkm",
+            "next_exon_max_rpkm",
+            "max_avg_rpkm",
+            "max_gene_rpkm",
+            "max_psi",
+            "percent_of_max_psi",
+            "percent_of_max_rpkm",
+            "main_rpkm_to_upstream_rpkm_ratio",
+            "main_rpkm_to_downstream_rpkm_ratio",
+            "sum_psi_all_samples",
+            "sum_psi_other_samples",
+            "mean_psi_other_samples",
+            "psi_diff_from_mean_other_samples",
+            "sum_rpkm_all_samples",
+            "sum_rpkm_other_samples",
+            "mean_rpkm_other_samples",
+            "rpkm_percentage_of_mean_other_samples"
         ]
+        for f in float_fields:
+            df = df.loc[df[f] >= float(filters[f][1].get())]
 
-        filtered_dataset = filtered_dataset.loc[filtered_dataset["splice_type"].isin(keep_splice_types)]
+        # Filter on splice types
+        include_types = []  # List of splice types to include
+        for st, st_fields in filters["splice_type"].items():
+            if st_fields[0]:
+                include_types.append(st)
 
-        # Check if there are remaining entries after filtering
-        if filtered_dataset.empty:
-            return None
+        df = df.loc[df["splice_type"].isin(include_types)]
 
-        return filtered_dataset
+        # Filter on tags
+        include_tags = []  # List of tags to include
+        if filters["event_tag"]["interesting"][0]:
+            include_tags.append(TAG_INTERESTING)
+        if filters["event_tag"]["not_interesting"][0]:
+            include_tags.append(TAG_NOT_INTERESTING)
+        if filters["event_tag"]["uncertain"][0]:
+            include_tags.append(TAG_UNCERTAIN)
+        if filters["event_tag"]["no_tag"][0]:
+            include_tags.append(TAG_NO_TAG)
+
+        df = df.loc[df["event_tag"].isin(include_tags)]
+
+        # Return filtered dataset
+        return df
 
     def save_filters(self, filters, filepath):
         """

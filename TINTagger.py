@@ -701,6 +701,8 @@ class TINTagger(tk.Tk):
 
     def show_filter_dataset_window(self):
 
+        # TODO: Handle overfloating horizontal space. Scrollbar or something.
+
         # Create a new window to display filters in
         window = tk.Toplevel()
         window.bind("<Escape>", lambda event=None: window.destroy())  # Close window on escape
@@ -802,7 +804,7 @@ class TINTagger(tk.Tk):
             "prev_exon_rpkm",
             "next_exon_tot_reads",
             "next_exon_rpkm",
-            "avg_tot_read",
+            "avg_tot_reads",
             "prev_exon_max_rpkm",
             "next_exon_max_rpkm",
             "max_avg_rpkm",
@@ -846,7 +848,7 @@ class TINTagger(tk.Tk):
         cancel_button = ttk.Button(buttons_frame, text="Cancel", command=lambda: window.destroy())
         cancel_button.grid(column=0, row=0, sticky="W")
         # Apply button
-        apply_button = ttk.Button(buttons_frame, text="Apply", command=None)
+        apply_button = ttk.Button(buttons_frame, text="Apply", command=self.apply_filters)
         apply_button.grid(column=1, row=0, sticky="E")
         # Bind apply button to enter key
         window.bind("<Return>", lambda event=None: apply_button.invoke())
@@ -871,7 +873,7 @@ class TINTagger(tk.Tk):
             "next_exon_rpkm": ["0.00", tk.StringVar(), "Min. downstream exon RPKM"],
             "avg_rpkm": ["0.00", tk.StringVar(), "Min. main exon RPKM"],
             "tot_reads": ["0", tk.StringVar(), "Min. main exon total reads"],
-            "avg_tot_read": ["0.00", tk.StringVar(), "Min. average main exon total reads (all samples)"],
+            "avg_tot_reads": ["0.00", tk.StringVar(), "Min. average main exon total reads (all samples)"],
             "occurrences": ["0", tk.StringVar(), "Min. number of samples event is present in"],
             "prev_exon_max_rpkm": ["0.00", tk.StringVar(), "Min. upstream exon max RPKM"],
             "next_exon_max_rpkm": ["0.00", tk.StringVar(), "Min. downstream exon max RPKM"],
@@ -900,13 +902,113 @@ class TINTagger(tk.Tk):
                 "ME": [True, tk.BooleanVar(), "Mutually Exclusive Exon"],
             },
             "event_tag": {
-                "Interesting": [True, tk.BooleanVar(), "Interesting event"],
-                "Not interesting": [True, tk.BooleanVar(), "Not interesting event"],
-                "No tag": [True, tk.BooleanVar(), "No tag"]
+                "interesting": [True, tk.BooleanVar(), "Interesting event"],
+                "not_interesting": [True, tk.BooleanVar(), "Not interesting event"],
+                "uncertain": [True, tk.BooleanVar(), "Uncertain"],
+                "no_tag": [True, tk.BooleanVar(), "No tag"]
             }
         }
 
         return default_filters
+
+    def apply_filters(self):
+        """
+        Sanitize filter values and pass them on to the dataprocessor to be applied to the dataset.
+        """
+
+        # Check if dataset is present
+        try:
+            if not self.original_dataset:
+                tkMessageBox.showerror("Filter error", "Cannot apply filters, as no dataset is loaded. Please load one.")
+                return
+        except ValueError:
+            # It's a valid dataframe, continue
+            pass
+
+        int_fields = ["included_counts", "excluded_counts", "tot_reads", "occurrences"]
+        float_fields = [
+            "psi",
+            "rpkm",
+            "avg_rpkm",
+            "prev_exon_tot_reads",
+            "prev_exon_rpkm",
+            "next_exon_tot_reads",
+            "next_exon_rpkm",
+            "avg_tot_reads",
+            "prev_exon_max_rpkm",
+            "next_exon_max_rpkm",
+            "max_avg_rpkm",
+            "max_gene_rpkm",
+            "max_psi",
+            "percent_of_max_psi",
+            "percent_of_max_rpkm",
+            "main_rpkm_to_upstream_rpkm_ratio",
+            "main_rpkm_to_downstream_rpkm_ratio",
+            "sum_psi_all_samples",
+            "sum_psi_other_samples",
+            "mean_psi_other_samples",
+            "psi_diff_from_mean_other_samples",
+            "sum_rpkm_all_samples",
+            "sum_rpkm_other_samples",
+            "mean_rpkm_other_samples",
+            "rpkm_percentage_of_mean_other_samples"
+        ]
+
+        # Sanitize int fields
+        int_errors = []
+        for i in int_fields:
+            try:
+                int_value = int(self.filters[i][1].get())
+                self.filters[i][0] = self.filters[i][1].get()
+            except ValueError:
+                print "Error sanitizing int field %s: <%s>" % (i, self.filters[i][1].get())
+                int_errors.append(self.filters[i][2])
+
+        # Sanitize float fields
+        float_errors = []
+        for f in float_fields:
+            try:
+                float_value = float(self.filters[f][1].get())
+                self.filters[f][0] = self.filters[f][1].get()
+            except ValueError:
+                print "Error sanitizing float field %s: <%s>" % (f, self.filters[f][1].get())
+                float_errors.append(self.filters[f][2])
+
+        # Check for errors
+        error_message = ""
+        if len(int_errors) > 0:
+            error_message += "ERROR\n\nThe following fields must be integers (whole numbers, not floats or text. E.g. 1, not 1.00 or 'one'):\n\n"
+            error_message += ", ".join(["<" + e + ">" for e in int_errors])
+
+        if len(float_errors) > 0:
+            error_message += "\n\nAnd the following fields must be floats:\n\n"
+            error_message += ", ".join(["<" + f + ">" for f in float_errors])
+
+        if len(int_errors) + len(float_errors) > 0:
+            tkMessageBox.showerror("Filter error", error_message)
+            return
+
+        # Store selected values for splice types (not sure if this is necessary)
+        for splice_type in self.filters["splice_type"].keys():
+            self.filters["splice_type"][splice_type][0] = self.filters["splice_type"][splice_type][1].get()
+
+        # And the same for event tags (again, this might be unnecessary)
+        for tag in self.filters["event_tag"].keys():
+            self.filters["event_tag"][tag][0] = self.filters["event_tag"][tag][1].get()
+
+        # Fields are sanitized
+        filtered_dataset = self.data_processor.filter_dataset(self.original_dataset, self.filters)
+
+        # Get dataset
+        if filtered_dataset.empty:
+            tkMessageBox.showinfo("Filter error", "No events matching the current filter.")
+            return
+
+        # New dataset is fine, update UI
+        self.dataset = filtered_dataset
+        self.all_asids = sorted(list(self.dataset["as_id"].unique()))
+        self.current_asid = self.all_asids[0]
+        self.update_information()
 
     def save_dataset_filters(self):
         """
@@ -950,9 +1052,6 @@ class TINTagger(tk.Tk):
             else:
                 print "Error when loading filters from file."
                 self.set_statusbar_text("Filters not loaded: Something went wrong when loading filters from file.")
-
-    def apply_filters(self, filters=None):
-        pass
 
     def center_window(self, window):
         """
