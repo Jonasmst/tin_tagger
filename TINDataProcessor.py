@@ -684,7 +684,7 @@ class TINDataProcessor(object):
         # PSI diff (in percentage) from mean PSI in other samples
         final_df["sum_psi_all_samples"] = final_df.groupby("as_id")["psi"].transform(sum)
         final_df["sum_psi_other_samples"] = final_df["sum_psi_all_samples"] - final_df["psi"]
-        final_df["mean_psi_other_samples"] = final_df["sum_psi_other_samples"] / final_df["occurrences"].astype(float) - 1
+        final_df["mean_psi_other_samples"] = final_df["sum_psi_other_samples"] / (final_df["occurrences"].astype(float) - 1)
         # For events only occurring in 1 sample, mean_psi_other_samples will be np.inf. We'll replace them with 0s and
         # just ignore occurrences < 4 or something when training algos.
         final_df["mean_psi_other_samples"].replace(np.inf, 0.00)
@@ -693,7 +693,7 @@ class TINDataProcessor(object):
         # RPKM diff (in percentage) from mean RPKM in other samples
         final_df["sum_rpkm_all_samples"] = final_df.groupby("as_id")["avg_rpkm"].transform(sum)
         final_df["sum_rpkm_other_samples"] = final_df["sum_rpkm_all_samples"] - final_df["avg_rpkm"]
-        final_df["mean_rpkm_other_samples"] = final_df["sum_rpkm_other_samples"] / final_df["occurrences"].astype(float) - 1
+        final_df["mean_rpkm_other_samples"] = final_df["sum_rpkm_other_samples"] / (final_df["occurrences"].astype(float) - 1)
         # For events only occurring in 1 sample, mean_rpkm_other_samples will be np.inf. We'll replace them with 0s and
         # just ignore occurrences < 4 or something when training algos.
         final_df["mean_rpkm_other_samples"].replace(np.inf, 0.00)
