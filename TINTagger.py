@@ -909,6 +909,7 @@ class TINTagger(tk.Tk):
             }
         }
 
+        print "Merge new filter approach onto master branch"
         return default_filters
 
     def apply_filters(self):
