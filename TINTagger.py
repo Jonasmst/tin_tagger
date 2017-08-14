@@ -727,7 +727,57 @@ class TINTagger(tk.Tk):
 
 
     def get_default_filters(self):
-        pass
+        """
+        Creates a default filter for the current original_dataset.
+        """
+
+        default_filters = {
+            "psi": [0.00, tk.DoubleVar()],
+            "included_counts": [0, tk.IntVar()],
+            "excluded_counts": [0, tk.IntVar()],
+            "rpkm": [0.00, tk.DoubleVar()],
+            "prev_exon_tot_reads": [0, tk.IntVar()], # Be aware that these do not apply to all splice types
+            "prev_exon_rpkm": [0.00, tk.DoubleVar()],  # Be aware that these do not apply for all splice types
+            "next_exon_tot_reads": [0, tk.IntVar()],
+            "next_exon_rpkm": [0.00, tk.DoubleVar()],
+            "avg_rpkm": [0.00, tk.DoubleVar()],
+            "tot_reads": [0, tk.IntVar()],
+            "avg_tot_read": [0.00, tk.DoubleVar()],
+            "occurrences": [0, tk.IntVar()],
+            "prev_exon_max_rpkm": [0.00, tk.DoubleVar()],
+            "next_exon_max_rpkm": [0.00, tk.DoubleVar()],
+            "max_avg_rpkm": [0.00, tk.DoubleVar()],
+            "max_gene_rpkm": [0.00, tk.DoubleVar()],
+            "max_psi": [0.00, tk.DoubleVar()],
+            "percent_of_max_psi": [0.00, tk.DoubleVar()],
+            "percent_of_max_rpkm": [0.00, tk.DoubleVar()],
+            "main_rpkm_to_upstream_rpkm_ratio": [0.00, tk.DoubleVar()],
+            "main_rpkm_to_downstream_rpkm_ratio": [0.00, tk.DoubleVar()],
+            "sum_psi_all_samples": [0.00, tk.DoubleVar()],
+            "sum_psi_other_samples": [0.00, tk.DoubleVar()],
+            "mean_psi_other_samples": [0.00, tk.DoubleVar()],
+            "psi_diff_from_mean_other_samples": [0.00, tk.DoubleVar()],
+            "sum_rpkm_all_samples": [0.00, tk.DoubleVar()],
+            "sum_rpkm_other_samples": [0.00, tk.DoubleVar()],
+            "mean_rpkm_other_samples": [0.00, tk.DoubleVar()],
+            "rpkm_percentage_of_mean_other_samples": [0.00, tk.DoubleVar()],
+            "splice_type": {
+                "AA": [True, tk.BooleanVar()],
+                "AD": [True, tk.BooleanVar()],
+                "ES": [True, tk.BooleanVar()],
+                "RI": [True, tk.BooleanVar()],
+                "AP": [True, tk.BooleanVar()],
+                "AT": [True, tk.BooleanVar()],
+                "ME": [True, tk.BooleanVar()],
+            },
+            "event_tag": {
+                "Interesting": [True, tk.BooleanVar()],
+                "Not interesting": [True, tk.BooleanVar()],
+                "No tag": [True, tk.BooleanVar()]
+            }
+        }
+
+        return default_filters
 
     def save_dataset_filters(self):
         """
