@@ -701,161 +701,30 @@ class TINTagger(tk.Tk):
 
     def show_filter_dataset_window(self):
 
-        # Alter a copy of the current settings and only apply them if instructed by the user
-        native_filters = self.convert_filters_to_native_types()  # copy.deepcopy() doesn't understand tk.IntVars
-        native_filters_deepcopy = copy.deepcopy(native_filters)
-        filters_copy = self.convert_filters_to_tk_specific_datatypes(native_filters_deepcopy)
+        # Create a new window to display filters in
+        window = tk.Toplevel()
+        window.bind("<Escape>", lambda event=None: window.destroy())  # Close window on escape
+        window.geometry("400x400")  # TODO: Remove this
 
-        ############################################
-        # Create a window to display everything in #
-        ############################################
-        filter_window = tk.Toplevel()
-        filter_window.bind("<Escape>", lambda event=None: filter_window.destroy())
-        filter_window.wm_title("Filter dataset")
-        filter_window.geometry("400x500")
+        # Frame for filters
+        filters_frame = ttk.Frame(window)
+        filters_frame.grid(column=0, row=0, sticky="NEWS")
 
-        # A frame to hold the filtering options
-        filter_frame = ttk.Frame(filter_window, padding=(0, 0, 0, 100))
-        filter_frame.grid(column=0, row=0, sticky="NEWS")
-        filter_frame.focus_force()  # Force focus to a widget in this window so that binds work
+        # HERE: Filters
 
-        # A frame on the bottom to hold the buttons
-        button_frame = ttk.Frame(filter_window)
-        button_frame.grid(column=0, row=1, sticky="NEWS")
 
-        # Set weights for the rows so that filter frame expands, but not button frame.
-        filter_window.rowconfigure(0, weight=1)
-        filter_window.columnconfigure(0, weight=1)
-        filter_frame.columnconfigure(0, weight=1)
+        # Frame for buttons
+        buttons_frame = ttk.Frame(window)
+        buttons_frame.grid(column=0, row=1, sticky="SEW")
+        # Cancel button
+        cancel_button = ttk.Button(buttons_frame, text="Cancel", command=None)
+        cancel_button.grid(column=0, row=0, sticky="W")
+        # Apply button
+        apply_button = ttk.Button(buttons_frame, text="Apply", command=None)
+        apply_button.grid(column=1, row=0, sticky="E")
+        # Bind apply button to enter key
+        window.bind("<Return>", lambda event=None: apply_button.invoke())
 
-        # Add a statusbar to the filters window
-        filter_statusbar = ttk.Frame(filter_window, borderwidth=1, relief=tk.SUNKEN)
-        filter_statusbar.grid(column=0, row=2, sticky="NEWS")
-        self.filter_statusbar_label = ttk.Label(filter_statusbar, text="All filters are valid", font="tkDefaultFont")
-        self.filter_statusbar_label.grid(column=0, row=0, sticky="NEWS")
-
-        # Validation functions (see http://infohost.nmt.edu/tcc/help/pubs/tkinter/web/entry-validation.html)
-        validate_positive_integer = (self.register(self.validate_positive_integer), "%P", "%W", "%d", "%V")
-        validate_positive_float = (self.register(self.validate_positive_float), "%P", "%W", "%d", "%V")
-
-        # Keep track of the rows we've assigned stuff to in the filter frame
-        current_filter_row = 0
-
-        #################
-        # Setup filters #
-        #################
-
-        # Filter entry for included counts
-        inc_counts_frame = ttk.Frame(filter_frame)
-        inc_counts_frame.grid(column=0, row=current_filter_row, sticky="NEWS")
-        inc_counts_label = ttk.Label(inc_counts_frame, text="Min. included counts:")
-        inc_counts_label.grid(column=0, row=0, sticky="NEWS")
-        inc_counts_entry = ttk.Entry(
-            inc_counts_frame,
-            textvariable=filters_copy["included_counts"],
-            exportselection=0,
-            justify=tk.LEFT,
-            validatecommand=validate_positive_integer,
-            validate="all",
-            name="included_counts_filter"
-        )
-        inc_counts_entry.grid(column=1, row=0, sticky="NEWS")
-        inc_counts_frame.columnconfigure(1, weight=1)
-
-        current_filter_row += 1
-
-        # Filter entry for excluded counts
-        excl_counts_frame = ttk.Frame(filter_frame)
-        excl_counts_frame.grid(column=0, row=current_filter_row, sticky="NEWS")
-        excl_counts_label = ttk.Label(excl_counts_frame, text="Min. excluded counts:")
-        excl_counts_label.grid(column=0, row=0, sticky="NEWS")
-        excl_counts_entry = ttk.Entry(
-            excl_counts_frame,
-            textvariable=filters_copy["excluded_counts"],
-            exportselection=0,
-            justify=tk.LEFT,
-            validatecommand=validate_positive_integer,
-            validate="all",
-            name="excluded_counts_filter"
-        )
-        excl_counts_entry.grid(column=1, row=0, sticky="NEWS")
-        excl_counts_frame.columnconfigure(1, weight=1)
-
-        current_filter_row += 1
-
-        # Filter entry for PSI
-        psi_frame = ttk.Frame(filter_frame)
-        psi_frame.grid(column=0, row=current_filter_row, sticky="NEWS")
-        psi_label = ttk.Label(psi_frame, text="Min. PSI:")
-        psi_label.grid(column=0, row=0)
-        psi_entry = ttk.Entry(
-            psi_frame,
-            textvariable=filters_copy["psi"],
-            exportselection=0,
-            justify=tk.LEFT,
-            validatecommand=validate_positive_float,
-            validate="all",
-            name="psi_filter"
-        )
-        psi_entry.grid(column=1, row=0, sticky="NEWS")
-        psi_frame.columnconfigure(1, weight=1)
-
-        current_filter_row += 1
-
-        # Filter entry for gene RPKM
-        rpkm_frame = ttk.Frame(filter_frame)
-        rpkm_frame.grid(column=0, row=current_filter_row, sticky="NEWS")
-        rpkm_label = ttk.Label(rpkm_frame, text="Min. gene RPKM:")
-        rpkm_label.grid(column=0, row=0)
-        rpkm_entry = ttk.Entry(
-            rpkm_frame,
-            textvariable=filters_copy["rpkm"],
-            exportselection=0,
-            justify=tk.LEFT,
-            validatecommand=validate_positive_float,
-            validate="all",
-            name="rpkm_filter"
-        )
-        rpkm_entry.grid(column=1, row=0, sticky="NEWS")
-        rpkm_frame.columnconfigure(1, weight=1)
-
-        current_filter_row += 1
-
-        # Filter choices for splice types
-        splice_type_frame = ttk.Frame(filter_frame)
-        splice_type_frame.grid(column=0, row=current_filter_row, sticky="NEWS")
-        splice_type_label = ttk.Label(splice_type_frame, text="Splice types:")
-        # Keep track of splice type row
-        current_splice_type_row = 0
-        splice_type_label.grid(column=0, row=current_splice_type_row, sticky="NEWS")
-        current_splice_type_row += 1
-
-        # Setup checkboxes
-        for splice_type in sorted(filters_copy["splice_type"].keys()):
-            # Set on or off
-            filters_copy["splice_type"][splice_type]["enabled_var"].set(filters_copy["splice_type"][splice_type]["enabled"])
-            check_button = ttk.Checkbutton(
-                splice_type_frame,
-                text=filters_copy["splice_type"][splice_type]["description"],
-                variable=filters_copy["splice_type"][splice_type]["enabled_var"],
-                onvalue=1,
-                offvalue=0
-            )
-            check_button.grid(column=0, row=current_splice_type_row, sticky="W")
-            current_splice_type_row += 1
-
-        current_filter_row += 1
-
-        ################################
-        # Add Apply and Cancel buttons #
-        ################################
-        cancel_button = ttk.Button(button_frame, text="Cancel", command=filter_window.destroy)
-        cancel_button.grid(column=0, row=0, sticky="E")
-        #self.apply_button = ttk.Button(button_frame, text="Apply", command=self.apply_filters)
-        self.apply_button = ttk.Button(button_frame, text="Apply", command=lambda: self.apply_filters(filters_copy))
-        self.apply_button.grid(column=1, row=0, sticky="E")
-        button_frame.columnconfigure(0, weight=1)
-        #button_frame.columnconfigure(1, weight=1)
 
     def validate_positive_integer(self, string_value, widget_name, edit_type, edit_reason):
         """
@@ -934,60 +803,7 @@ class TINTagger(tk.Tk):
         return True
 
     def get_default_filters(self):
-        """
-        Returns a default filter: Include all splice types, all minimum values are 0.
-        """
-        dataset_filter = {
-            "included_counts": tk.StringVar(),
-            "excluded_counts": tk.StringVar(),
-            "psi": tk.StringVar(),
-            "rpkm": tk.StringVar(),
-            "splice_type": {
-                "AP": {
-                    "description": "Alternative Promoter (AP)",
-                    "enabled": 1,
-                    "enabled_var": tk.IntVar()
-                },
-                "AD": {
-                    "description": "Alternative Donor Site (AD)",
-                    "enabled": 1,
-                    "enabled_var": tk.IntVar()
-                },
-                "AA": {
-                    "description": "Alternative Acceptor Site (AA)",
-                    "enabled": 1,
-                    "enabled_var": tk.IntVar()
-                },
-                "ES": {
-                    "description": "Exon Skipping (ES)",
-                    "enabled": 1,
-                    "enabled_var": tk.IntVar()
-                },
-                "AT": {
-                    "description": "Alternative Terminator (AT)",
-                    "enabled": 1,
-                    "enabled_var": tk.IntVar()
-                },
-                "RI": {
-                    "description": "Retained Intron (RI)",
-                    "enabled": 1,
-                    "enabled_var": tk.IntVar()
-                },
-                "ME": {
-                    "description": "Mutually Exclusive Exons (ME)",
-                    "enabled": 1,
-                    "enabled_var": tk.IntVar()
-                }
-            }
-        }
-
-        # Set default values
-        dataset_filter["included_counts"].set("0")
-        dataset_filter["excluded_counts"].set("0")
-        dataset_filter["psi"].set("0.00")
-        dataset_filter["rpkm"].set("0.00")
-
-        return dataset_filter
+        pass
 
     def save_dataset_filters(self):
         """
@@ -1033,95 +849,7 @@ class TINTagger(tk.Tk):
                 self.set_statusbar_text("Filters not loaded: Something went wrong when loading filters from file.")
 
     def apply_filters(self, filters=None):
-        """
-        Applies the currently active filter. Calls the TINDataProcessor to return a filtered dataset and updates
-        self.dataset to reflect the changes. Also resets the self.current_asid to 0. Finally, calls
-        self.update_information() to update the UI.
-        """
-
-        # If filters are passed in, assign them to self.filters first
-        if filters:
-            print "Apply() got filters."
-            self.filters = filters
-
-        # Convert current filters to native datatypes
-        native_filters = self.convert_filters_to_native_types()
-
-        # Get filtered data from data processor
-        filtered_dataset = self.data_processor.filter_dataset(self.original_dataset, native_filters)
-
-        # Check that it isn't None
-        try:
-            if not filtered_dataset.empty:
-                self.dataset = filtered_dataset
-                self.all_asids = sorted(list(self.dataset["as_id"].unique()))
-                self.current_asid = self.all_asids[0]
-                self.update_information()
-        except AttributeError as e:
-            print "ERROR: Empty dataset after filtering: %s" % e.message
-
-            if not filtered_dataset:
-                tkMessageBox.showerror("Error", "Selected filters returned empty dataset. Filters have been reset to defaults.")
-                self.filters = self.get_default_filters()
-            else:
-                print "BUG: Reached unreachable code (TINTagger.apply_filters())"
-
-    def convert_filters_to_native_types(self):
-        """
-        Converts Tkinter-specific filetypes present in the current filter (e.g. tk.IntVar(), tk.StringVar()), into
-        native python datatypes (e.g. int, str) and returns the converted filters.
-        """
-        native = {
-            "included_counts": int(self.filters["included_counts"].get()),
-            "excluded_counts": int(self.filters["excluded_counts"].get()),
-            "psi": float(self.filters["psi"].get()),
-            "rpkm": float(self.filters["rpkm"].get())
-        }
-
-        splice_types = {}
-        for name, info in self.filters["splice_type"].items():
-            splice_types[name] = {
-                "description": self.filters["splice_type"][name]["description"],
-                "enabled": self.filters["splice_type"][name]["enabled"],
-                "enabled_var": int(self.filters["splice_type"][name]["enabled_var"].get())
-            }
-
-        native["splice_type"] = splice_types
-
-        return native
-
-    def convert_filters_to_tk_specific_datatypes(self, filters):
-        """
-        Converts certain dataset filter entries to tk-specific datatypes (e.g. tk.IntVar(), tk.StringVar()) from their
-        native python datatype representation. Returns the converted filters.
-        """
-
-        # Initialize variables as tk-specific datatypes
-        tk_specific = {
-            "included_counts": tk.StringVar(),
-            "excluded_counts": tk.StringVar(),
-            "psi": tk.StringVar(),
-            "rpkm": tk.StringVar()
-        }
-
-        # Assign values to the variables, based on the values from the native filters
-        tk_specific["included_counts"].set(str(filters["included_counts"]))
-        tk_specific["excluded_counts"].set(str(filters["excluded_counts"]))
-        tk_specific["psi"].set(str(filters["psi"]))
-        tk_specific["rpkm"].set(str(filters["rpkm"]))
-
-        splice_types = {}
-        for name, info in filters["splice_type"].items():
-            splice_types[name] = {
-                "description": filters["splice_type"][name]["description"],
-                "enabled": filters["splice_type"][name]["enabled"],
-                "enabled_var": tk.IntVar()
-            }
-            splice_types[name]["enabled_var"].set(splice_types[name]["enabled"])
-
-        tk_specific["splice_type"] = splice_types
-
-        return tk_specific
+        pass
 
     def center_window(self, window):
         """
