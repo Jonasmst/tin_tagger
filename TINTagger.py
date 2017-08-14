@@ -704,20 +704,146 @@ class TINTagger(tk.Tk):
         # Create a new window to display filters in
         window = tk.Toplevel()
         window.bind("<Escape>", lambda event=None: window.destroy())  # Close window on escape
-        window.geometry("400x400")  # TODO: Remove this
 
         # Frame for filters
         filters_frame = ttk.Frame(window)
         filters_frame.grid(column=0, row=0, sticky="NEWS")
+        window.rowconfigure(0, weight=1)
 
-        # HERE: Filters
+        ##########################
+        ##### Normal filters #####
+        ##########################
+        current_row = 0
+        normal_header = ttk.Label(filters_frame, text="Filters", font="TkDefaultFont 16")
+        normal_filters_labelframe = ttk.LabelFrame(filters_frame, padding=(0, 10, 0, 10), labelanchor="n", labelwidget=normal_header)
+        normal_filters_labelframe.grid(column=0, row=current_row, sticky="NEWS")
+        filters_frame.rowconfigure(current_row, weight=1)
+        current_row += 1
+        normal_current_row = 0  # Keep track of which row we're at
+        # Add filters to the labelframe
+        for filter_name in ["psi", "included_counts", "excluded_counts", "rpkm", "avg_rpkm", "tot_reads", "occurrences"]:
 
+            filter_label = ttk.Label(normal_filters_labelframe, text="%s:" % self.filters[filter_name][2])
+            filter_label.grid(column=0, row=normal_current_row, sticky="NEWS")
+
+            self.filters[filter_name][1].set(self.filters[filter_name][0])
+            filter_entry = ttk.Entry(normal_filters_labelframe, textvariable=self.filters[filter_name][1])
+            filter_entry.grid(column=1, row=normal_current_row, sticky="NEWS")
+
+            normal_current_row += 1
+
+        # Make sure labels and entries follow on window rescale
+        normal_filters_labelframe.columnconfigure(0, weight=1)
+        normal_filters_labelframe.columnconfigure(1, weight=1)
+
+        ###############################
+        ##### Splice type filters #####
+        ###############################
+        splice_header = ttk.Label(filters_frame, text="Splice type filters", font="TkDefaultFont 16")
+        splice_type_labelframe = ttk.LabelFrame(filters_frame, padding=(0, 10, 0, 10), labelanchor="n", labelwidget=splice_header)
+        splice_type_labelframe.grid(column=0, row=current_row, sticky="NEWS")
+        filters_frame.rowconfigure(current_row, weight=1)
+        current_row += 1
+        current_splice_row = 0
+        for splice_type in self.filters["splice_type"].keys():
+            # Set current value to control variable
+            self.filters["splice_type"][splice_type][1].set(self.filters["splice_type"][splice_type][0])
+
+            splice_label = ttk.Label(splice_type_labelframe, text=self.filters["splice_type"][splice_type][2])
+            splice_label.grid(column=0, row=current_splice_row, sticky="W")
+
+            checkbutton = ttk.Checkbutton(
+                splice_type_labelframe,
+                variable=self.filters["splice_type"][splice_type][1],
+                onvalue=True,
+                offvalue=False
+            )
+            checkbutton.grid(column=1, row=current_splice_row, sticky="NEWS")
+            current_splice_row += 1
+
+        #############################
+        ##### Event tag filters #####
+        #############################
+        tag_header = ttk.Label(filters_frame, text="Event tag filters", font="TkDefaultFont 16")
+        tag_labelframe = ttk.LabelFrame(filters_frame, padding=(0, 10, 0, 10), labelanchor="n", labelwidget=tag_header)
+        tag_labelframe.grid(column=0, row=current_row, sticky="NEWS")
+        filters_frame.rowconfigure(current_row, weight=1)
+        current_row += 1
+        current_tag_row = 0
+        for tag in self.filters["event_tag"].keys():
+            # Set current value to control variable
+            self.filters["event_tag"][tag][1].set(self.filters["event_tag"][tag][0])
+
+            # Add label
+            tag_label = ttk.Label(tag_labelframe, text=self.filters["event_tag"][tag][2])
+            tag_label.grid(column=0, row=current_tag_row, sticky="W")
+
+            checkbutton = ttk.Checkbutton(
+                tag_labelframe,
+                variable=self.filters["event_tag"][tag][1],
+                onvalue=True,
+                offvalue=False
+            )
+            checkbutton.grid(column=1, row=current_tag_row, sticky="W")
+            current_tag_row += 1
+
+        ############################
+        ##### Advanced filters #####
+        ############################
+        avd_header = ttk.Label(filters_frame, text="Advanced filters", font="TkDefaultFont 16")
+        advanced_labelframe = ttk.LabelFrame(filters_frame, padding=(0, 10, 0, 10), labelanchor="n", labelwidget=avd_header)
+        advanced_labelframe.grid(column=0, row=current_row, sticky="NEWS")
+        filters_frame.rowconfigure(current_row, weight=1)
+        current_row += 1
+        current_advanced_row = 0
+
+        for adv_filter in [
+            "prev_exon_tot_reads",
+            "prev_exon_rpkm",
+            "next_exon_tot_reads",
+            "next_exon_rpkm",
+            "avg_tot_read",
+            "prev_exon_max_rpkm",
+            "next_exon_max_rpkm",
+            "max_avg_rpkm",
+            "max_gene_rpkm",
+            "max_psi",
+            "percent_of_max_psi",
+            "percent_of_max_rpkm",
+            "main_rpkm_to_upstream_rpkm_ratio",
+            "main_rpkm_to_downstream_rpkm_ratio",
+            "sum_psi_all_samples",
+            "sum_psi_other_samples",
+            "mean_psi_other_samples",
+            "psi_diff_from_mean_other_samples",
+            "sum_rpkm_all_samples",
+            "sum_rpkm_other_samples",
+            "mean_rpkm_other_samples",
+            "rpkm_percentage_of_mean_other_samples"
+        ]:
+            # Set current value to control variable
+            self.filters[adv_filter][1].set(self.filters[adv_filter][0])
+
+            # Add label
+            adv_label = ttk.Label(advanced_labelframe, text=self.filters[adv_filter][2])
+            adv_label.grid(column=0, row=current_advanced_row, sticky="NEWS")
+
+            # Add entry
+            adv_entry = ttk.Entry(advanced_labelframe, textvariable=self.filters[adv_filter][1])
+            adv_entry.grid(column=1, row=current_advanced_row, sticky="NEWS")
+            current_advanced_row += 1
+
+        # Distribute equal weight to both columns of labelframe
+        advanced_labelframe.columnconfigure(0, weight=1)
+        advanced_labelframe.columnconfigure(1, weight=1)
 
         # Frame for buttons
         buttons_frame = ttk.Frame(window)
-        buttons_frame.grid(column=0, row=1, sticky="SEW")
+        buttons_frame.grid(column=0, row=1, sticky="NEWS")
+        buttons_frame.columnconfigure(0, weight=1)
+        buttons_frame.columnconfigure(1, weight=1)
         # Cancel button
-        cancel_button = ttk.Button(buttons_frame, text="Cancel", command=None)
+        cancel_button = ttk.Button(buttons_frame, text="Cancel", command=lambda: window.destroy())
         cancel_button.grid(column=0, row=0, sticky="W")
         # Apply button
         apply_button = ttk.Button(buttons_frame, text="Apply", command=None)
@@ -725,6 +851,9 @@ class TINTagger(tk.Tk):
         # Bind apply button to enter key
         window.bind("<Return>", lambda event=None: apply_button.invoke())
 
+        # Make sure window content follow on window rescale
+        window.columnconfigure(0, weight=1)
+        filters_frame.columnconfigure(0, weight=1)
 
     def get_default_filters(self):
         """
@@ -732,48 +861,48 @@ class TINTagger(tk.Tk):
         """
 
         default_filters = {
-            "psi": [0.00, tk.DoubleVar()],
-            "included_counts": [0, tk.IntVar()],
-            "excluded_counts": [0, tk.IntVar()],
-            "rpkm": [0.00, tk.DoubleVar()],
-            "prev_exon_tot_reads": [0, tk.IntVar()], # Be aware that these do not apply to all splice types
-            "prev_exon_rpkm": [0.00, tk.DoubleVar()],  # Be aware that these do not apply for all splice types
-            "next_exon_tot_reads": [0, tk.IntVar()],
-            "next_exon_rpkm": [0.00, tk.DoubleVar()],
-            "avg_rpkm": [0.00, tk.DoubleVar()],
-            "tot_reads": [0, tk.IntVar()],
-            "avg_tot_read": [0.00, tk.DoubleVar()],
-            "occurrences": [0, tk.IntVar()],
-            "prev_exon_max_rpkm": [0.00, tk.DoubleVar()],
-            "next_exon_max_rpkm": [0.00, tk.DoubleVar()],
-            "max_avg_rpkm": [0.00, tk.DoubleVar()],
-            "max_gene_rpkm": [0.00, tk.DoubleVar()],
-            "max_psi": [0.00, tk.DoubleVar()],
-            "percent_of_max_psi": [0.00, tk.DoubleVar()],
-            "percent_of_max_rpkm": [0.00, tk.DoubleVar()],
-            "main_rpkm_to_upstream_rpkm_ratio": [0.00, tk.DoubleVar()],
-            "main_rpkm_to_downstream_rpkm_ratio": [0.00, tk.DoubleVar()],
-            "sum_psi_all_samples": [0.00, tk.DoubleVar()],
-            "sum_psi_other_samples": [0.00, tk.DoubleVar()],
-            "mean_psi_other_samples": [0.00, tk.DoubleVar()],
-            "psi_diff_from_mean_other_samples": [0.00, tk.DoubleVar()],
-            "sum_rpkm_all_samples": [0.00, tk.DoubleVar()],
-            "sum_rpkm_other_samples": [0.00, tk.DoubleVar()],
-            "mean_rpkm_other_samples": [0.00, tk.DoubleVar()],
-            "rpkm_percentage_of_mean_other_samples": [0.00, tk.DoubleVar()],
+            "psi": ["0.00", tk.StringVar(), "Min. PSI"],
+            "included_counts": ["0", tk.StringVar(), "Min. main exon included counts"],
+            "excluded_counts": ["0", tk.StringVar(), "Min. main exon excluded counts"],
+            "rpkm": ["0.00", tk.StringVar(), "Min. gene RPKM"],
+            "prev_exon_tot_reads": ["0", tk.StringVar(), "Min. upstream exon total reads"],  # Be aware that these do not apply to all splice types
+            "prev_exon_rpkm": ["0.00", tk.StringVar(), "Min. upstream exon RPKM"],  # Be aware that these do not apply for all splice types
+            "next_exon_tot_reads": ["0", tk.StringVar(), "Min. downstream exon total reads"],
+            "next_exon_rpkm": ["0.00", tk.StringVar(), "Min. downstream exon RPKM"],
+            "avg_rpkm": ["0.00", tk.StringVar(), "Min. main exon RPKM"],
+            "tot_reads": ["0", tk.StringVar(), "Min. main exon total reads"],
+            "avg_tot_read": ["0.00", tk.StringVar(), "Min. average main exon total reads (all samples)"],
+            "occurrences": ["0", tk.StringVar(), "Min. number of samples event is present in"],
+            "prev_exon_max_rpkm": ["0.00", tk.StringVar(), "Min. upstream exon max RPKM"],
+            "next_exon_max_rpkm": ["0.00", tk.StringVar(), "Min. downstream exon max RPKM"],
+            "max_avg_rpkm": ["0.00", tk.StringVar(), "Min. main exon max RPKM"],
+            "max_gene_rpkm": ["0.00", tk.StringVar(), "Min. gene max RPKM"],
+            "max_psi": ["0.00", tk.StringVar(), "Min. main exon max PSI"],
+            "percent_of_max_psi": ["0.00", tk.StringVar(), "Min. main exon PSI percent of max. PSI"],
+            "percent_of_max_rpkm": ["0.00", tk.StringVar(), "Min. main exon RPKM percent of max in all samples"],
+            "main_rpkm_to_upstream_rpkm_ratio": ["0.00", tk.StringVar(), "Min, main exon RPKM to upstream exon RPKM ratio"],
+            "main_rpkm_to_downstream_rpkm_ratio": ["0.00", tk.StringVar(), "Min main exon RPKM to downstream exon RPKM ratio"],
+            "sum_psi_all_samples": ["0.00", tk.StringVar(), "Min. total PSI in all samples"],
+            "sum_psi_other_samples": ["0.00", tk.StringVar(), "Min. total PSI in other samples (excluding self)"],
+            "mean_psi_other_samples": ["0.00", tk.StringVar(), "Min. average PSI in other sample (excluding self)"],
+            "psi_diff_from_mean_other_samples": ["0.00", tk.StringVar(), "Min. difference in PSI from other samples"],
+            "sum_rpkm_all_samples": ["0.00", tk.StringVar(), "Min. sum main exon RPKM in all samples"],
+            "sum_rpkm_other_samples": ["0.00", tk.StringVar(), "Min. sum main exon RPKM in other samples"],
+            "mean_rpkm_other_samples": ["0.00", tk.StringVar(), "Min. average main exon RPKM in other samples"],
+            "rpkm_percentage_of_mean_other_samples": ["0.00", tk.StringVar(), "Min. main exon RPKM percentage of average in other samples"],
             "splice_type": {
-                "AA": [True, tk.BooleanVar()],
-                "AD": [True, tk.BooleanVar()],
-                "ES": [True, tk.BooleanVar()],
-                "RI": [True, tk.BooleanVar()],
-                "AP": [True, tk.BooleanVar()],
-                "AT": [True, tk.BooleanVar()],
-                "ME": [True, tk.BooleanVar()],
+                "AA": [True, tk.BooleanVar(), "Alternate Acceptor"],
+                "AD": [True, tk.BooleanVar(), "Alternate Donor"],
+                "ES": [True, tk.BooleanVar(), "Exon Skipping"],
+                "RI": [True, tk.BooleanVar(), "Retained Intron"],
+                "AP": [True, tk.BooleanVar(), "Alternate Promotor"],
+                "AT": [True, tk.BooleanVar(), "Alternate Terminator"],
+                "ME": [True, tk.BooleanVar(), "Mutually Exclusive Exon"],
             },
             "event_tag": {
-                "Interesting": [True, tk.BooleanVar()],
-                "Not interesting": [True, tk.BooleanVar()],
-                "No tag": [True, tk.BooleanVar()]
+                "Interesting": [True, tk.BooleanVar(), "Interesting event"],
+                "Not interesting": [True, tk.BooleanVar(), "Not interesting event"],
+                "No tag": [True, tk.BooleanVar(), "No tag"]
             }
         }
 
