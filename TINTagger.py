@@ -741,18 +741,24 @@ class TINTagger(tk.Tk):
         ###############################
         ##### Splice type filters #####
         ###############################
-        splice_header = ttk.Label(filters_frame, text="Splice type filters", font="TkDefaultFont 16")
-        splice_type_labelframe = ttk.LabelFrame(filters_frame, padding=(0, 10, 0, 10), labelanchor="n", labelwidget=splice_header)
-        splice_type_labelframe.grid(column=0, row=current_row, sticky="NEWS")
-        filters_frame.rowconfigure(current_row, weight=1)
+        # A common frame for splice type and event tag checkboxes
+        checkbox_frame = ttk.Frame(filters_frame, padding=(10, 10, 10, 10))
+        checkbox_frame.grid(column=0, row=current_row, sticky="NEWS")
+        checkbox_frame.columnconfigure(0, weight=1)
+        checkbox_frame.columnconfigure(1, weight=1)
         current_row += 1
+
+        # Splice type labeframe
+        splice_header = ttk.Label(checkbox_frame, text="Splice type filters", font="TkDefaultFont 16")
+        splice_type_labelframe = ttk.LabelFrame(checkbox_frame, padding=(0, 10, 0, 10), labelanchor="n", labelwidget=splice_header)
+        splice_type_labelframe.grid(column=0, row=0, sticky="NEWS")
         current_splice_row = 0
         for splice_type in self.filters["splice_type"].keys():
             # Set current value to control variable
             self.filters["splice_type"][splice_type][1].set(self.filters["splice_type"][splice_type][0])
 
             splice_label = ttk.Label(splice_type_labelframe, text=self.filters["splice_type"][splice_type][2])
-            splice_label.grid(column=0, row=current_splice_row, sticky="W")
+            splice_label.grid(column=0, row=current_splice_row, sticky="NEWS")
 
             checkbutton = ttk.Checkbutton(
                 splice_type_labelframe,
@@ -766,11 +772,9 @@ class TINTagger(tk.Tk):
         #############################
         ##### Event tag filters #####
         #############################
-        tag_header = ttk.Label(filters_frame, text="Event tag filters", font="TkDefaultFont 16")
-        tag_labelframe = ttk.LabelFrame(filters_frame, padding=(0, 10, 0, 10), labelanchor="n", labelwidget=tag_header)
-        tag_labelframe.grid(column=0, row=current_row, sticky="NEWS")
-        filters_frame.rowconfigure(current_row, weight=1)
-        current_row += 1
+        tag_header = ttk.Label(checkbox_frame, text="Event tag filters", font="TkDefaultFont 16")
+        tag_labelframe = ttk.LabelFrame(checkbox_frame, padding=(0, 10, 0, 10), labelanchor="n", labelwidget=tag_header)
+        tag_labelframe.grid(column=1, row=0, sticky="NEWS")
         current_tag_row = 0
         for tag in self.filters["event_tag"].keys():
             # Set current value to control variable
@@ -778,7 +782,7 @@ class TINTagger(tk.Tk):
 
             # Add label
             tag_label = ttk.Label(tag_labelframe, text=self.filters["event_tag"][tag][2])
-            tag_label.grid(column=0, row=current_tag_row, sticky="W")
+            tag_label.grid(column=0, row=current_tag_row, sticky="NEWS")
 
             checkbutton = ttk.Checkbutton(
                 tag_labelframe,
@@ -786,7 +790,7 @@ class TINTagger(tk.Tk):
                 onvalue=True,
                 offvalue=False
             )
-            checkbutton.grid(column=1, row=current_tag_row, sticky="W")
+            checkbutton.grid(column=1, row=current_tag_row, sticky="NEWS")
             current_tag_row += 1
 
         ############################
@@ -1016,6 +1020,10 @@ class TINTagger(tk.Tk):
         Calls the TINDataProcessor to save the current dataset filters to disk, at the param filepath.
         """
 
+        # TODO: Implement save_dataset_filters
+        tkMessageBox.showerror("DeprecationError", "This function is deprecated/need revision")
+        return
+
         # Open file chooser dialog
         filepath = asksaveasfilename(title="Save filters", defaultextension=".json", filetypes=[("JSON", "*.json")])
 
@@ -1034,6 +1042,9 @@ class TINTagger(tk.Tk):
         """
         Reads datasets filters from file, then calls apply_filters() to update the UI.
         """
+        # TODO: Implement read_dataset_filters
+        tkMessageBox.showerror("DeprecationError", "This function is deprecated/need revision")
+        return
 
         # Open file chooser dialog
         filepath = askopenfilename(title="Open filters", defaultextension=".json", filetypes=[("JSON", "*.json")])
