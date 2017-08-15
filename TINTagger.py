@@ -196,13 +196,10 @@ class TINTagger(tk.Tk):
         # Default filter options
         self.filters = self.get_default_filters()
 
-        # Flags to indicate if current filters are valid
-        self.valid_filters = {
-            "psi_filter": 1,
-            "included_counts_filter": 1,
-            "excluded_counts_filter": 1,
-            "rpkm_filter": 1
-        }
+        # Options for sorting dataset
+        self.sorting_options = {"sort_by_column": tk.StringVar(), "ascending": tk.BooleanVar()}
+        self.sorting_options["sort_by_column"].set("as_id")  # Default to as_id
+        self.sorting_options["ascending"].set(True)  # Default to True
 
         ###########################
         # Bind various keypresses #
@@ -703,6 +700,15 @@ class TINTagger(tk.Tk):
 
         # TODO: Handle overfloating horizontal space. Scrollbar or something.
 
+        # Check if dataset is present
+        try:
+            if not self.original_dataset:
+                tkMessageBox.showerror("Filter error", "Cannot apply filters, as no dataset is loaded. Please load one.")
+                return
+        except ValueError:
+            # It's a valid dataframe, continue
+            pass
+
         # Create a new window to display filters in
         window = tk.Toplevel()
         window.bind("<Escape>", lambda event=None: window.destroy())  # Close window on escape
@@ -711,11 +717,26 @@ class TINTagger(tk.Tk):
         filters_frame = ttk.Frame(window)
         filters_frame.grid(column=0, row=0, sticky="NEWS")
         window.rowconfigure(0, weight=1)
+        current_row = 0
+
+        ########################
+        ##### Sort dataset #####
+        ########################
+        sorting_header = ttk.Label(filters_frame, text="Sort dataset", font="TkDefaultFont 16")
+        sorting_labelframe = ttk.LabelFrame(filters_frame, padding=(0, 10, 0, 10), labelanchor="n", labelwidget=sorting_header)
+        sorting_labelframe.grid(column=0, row=current_row, sticky="NEWS")
+        current_row += 1
+        # Sorting optionmenu
+        sorting_choices = sorted(list(self.original_dataset.columns))
+        sorting_optionsmenu = ttk.OptionMenu(sorting_labelframe, self.sorting_options["sort_by_column"], *sorting_choices)
+        sorting_optionsmenu.grid(column=0, row=0, sticky="NEWS")
+        # Ascending/descending checkbox
+        order_checkbox = ttk.Checkbutton(sorting_labelframe, variable=self.sorting_options["ascending"], onvalue=True, offvalue=False, text="Sort ascending")
+        order_checkbox.grid(column=1, row=0, sticky="NEWS")
 
         ##########################
         ##### Normal filters #####
         ##########################
-        current_row = 0
         normal_header = ttk.Label(filters_frame, text="Filters", font="TkDefaultFont 16")
         normal_filters_labelframe = ttk.LabelFrame(filters_frame, padding=(0, 10, 0, 10), labelanchor="n", labelwidget=normal_header)
         normal_filters_labelframe.grid(column=0, row=current_row, sticky="NEWS")
@@ -1010,8 +1031,8 @@ class TINTagger(tk.Tk):
             return
 
         # New dataset is fine, update UI
-        self.dataset = filtered_dataset
-        self.all_asids = sorted(list(self.dataset["as_id"].unique()))
+        self.dataset = filtered_dataset.sort_values(by=self.sorting_options["sort_by_column"].get(), ascending=self.sorting_options["ascending"].get())
+        self.all_asids = list(self.dataset["as_id"].unique())
         self.current_asid = self.all_asids[0]
         self.update_information()
 
