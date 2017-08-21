@@ -383,6 +383,16 @@ class TINTagger(tk.Tk):
 
         current_row += 1
 
+        # Search field
+        search_label = ttk.Label(sidebar_information, text="Search AS ID:", font=label_font)
+        search_label.grid(column=0, row=current_row, sticky="NEWS")
+        search_entry = ttk.Entry(sidebar_information)
+        search_entry.grid(column=1, row=current_row, sticky="NEWS")
+        search_button = ttk.Button(sidebar_information, text="Search", command=lambda: self.search_asid(search_entry.get()))
+        search_button.grid(column=2, row=current_row, sticky="NSE")
+
+        current_row += 1
+
         # TEST: Button for training decision tree
         decision_tree_training_button = ttk.Button(sidebar_information, text="Train decision tree", command=self.train_decision_tree)
         decision_tree_training_button.grid(column=0, row=current_row, sticky="W")
@@ -413,6 +423,30 @@ class TINTagger(tk.Tk):
         sidebar_buttons.columnconfigure(2, weight=1)
 
         return right_sidebar
+
+    def search_asid(self, as_id=None):
+        """
+        Finds event with a given as_id and updates the UI. Displays an alert dialog if as_id is invalid or not present.
+        """
+        try:
+            as_id = int(as_id)
+        except ValueError:
+            tkMessageBox.showerror("Search error", "Invalid value: <%s>. Value must be an integer." % as_id)
+            return
+        except TypeError:
+            if not as_id:
+                tkMessageBox.showerror("Search error", "Please provide an input value.")
+            else:
+                tkMessageBox.showerror("Search error", "Invalid value: <%s>. Value must be an integer." % as_id)
+            return
+
+        if as_id not in self.all_asids:
+            tkMessageBox.showerror("Search error", "Selected AS ID is not in list.")
+            return
+
+        # AS ID is fine, update UI
+        self.current_asid = int(as_id)
+        self.update_information()
 
     def train_decision_tree(self):
         """
