@@ -239,7 +239,7 @@ class TINDataProcessor(object):
 
         # Find all events that are not yet tagged and get their as_ids
         untagged = dataset.loc[dataset["event_tag"] == TAG_NO_TAG]
-        untagged_asids = sorted(list(untagged.as_id.unique()))
+        untagged_asids = list(untagged.as_id.unique())
 
         # Return the first untagged as_id, if any
         if len(untagged_asids) > 0:
