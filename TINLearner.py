@@ -71,6 +71,7 @@ class TINLearner(object):
 
         # Extract events that have been tagged
         tagged_events = dataset.loc[dataset[self.tag_column] > -1]  # -1 means they're not tagged. 0, 1, 2 are valid tags.
+        tagged_events = tagged_events.loc[tagged_events["occurrences"] > 1]  # NaNs are present if event's only present in a single sample
         print "Tagged events:", len(tagged_events)
         minimum_tagged_events = 20
         if len(tagged_events) < minimum_tagged_events:
@@ -98,10 +99,10 @@ class TINLearner(object):
         training_set, validation_set = train_test_split(dataset, test_size=0.2)
 
         # TEST
-        print "Training set:"
-        print training_set
-        print "\nValidation set:"
-        print validation_set
+        #print "Training set:"
+        #print training_set
+        #print "\nValidation set:"
+        #print validation_set
         # END TEST
 
         # Fit tree
@@ -121,8 +122,23 @@ class TINLearner(object):
 
         :return: False if tree has not yet been fitted, np.array of tags if it has been fitted.
         """
+
+        # Only predict if the event occurs in more than one sample (otherwise a lot of the params are NaNs)
+        if event_df["occurrences"].iloc[0] <= 1:
+            print "Occurrence == 1, cancelling prediction."
+            return False
+
         try:
             tag_predictions = self.decision_tree.predict(event_df[self.training_columns])
+            print "##########################################################"
+            print "################### TAG PREDICTIONS ######################"
+            print "##########################################################"
+            print tag_predictions
+            print "##########################################################"
             return tag_predictions
         except NotFittedError:
+            return False
+        except ValueError as e:
+            print "ERROR when fitting: %s" % e.message
+            print "--Occurrences:", event_df["occurrences"]
             return False

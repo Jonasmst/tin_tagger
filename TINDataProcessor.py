@@ -344,10 +344,14 @@ class TINDataProcessor(object):
             try:
                 if not decision_tree_tags:
                     print "ERROR: Decision tree has not been fitted, yet attempted to predict value"
+                    event_df["decision_tree_tag"] = TAG_NO_TAG
             except ValueError:
                 # Result is a dataframe
+                print "Decision tree prediction success"
                 event_df.is_copy = False  # Suppress the annoying SettingWithCopyWarning
                 event_df.loc[:, "decision_tree_tag"] = decision_tree_tags
+                print "TAGS ADDED TO DATASET. CURRENT DATASET TAGS:"
+                print event_df["decision_tree_tag"]
                 # TODO: At some point include the predicted tags in the TINTagger's original dataset
         # END TEST
 
@@ -363,7 +367,8 @@ class TINDataProcessor(object):
 
             try:
                 # Get row for this sample
-                sample_row = dataset.loc[(dataset["as_id"] == as_id) & (dataset["name"] == s_name)].iloc[0]
+                #sample_row = dataset.loc[(dataset["as_id"] == as_id) & (dataset["name"] == s_name)].iloc[0]
+                sample_row = event_df.loc[event_df["name"] == s_name].iloc[0]
                 # Find if sample is reported by SpliceSeq or not
                 samples_data[s_name]["is_reported"] = self.is_event_reported_in_sample(s_name, as_id, dataset)
                 samples_data[s_name]["gene_rpkm"] = sample_row["rpkm"]

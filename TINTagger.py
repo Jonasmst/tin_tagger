@@ -728,6 +728,9 @@ class TINTagger(tk.Tk):
         current_row += 1
         # Sorting optionmenu
         sorting_choices = sorted(list(self.original_dataset.columns))
+        print "Options:"
+        print " --> Column:", self.sorting_options["sort_by_column"].get()
+        print " --> Ascending:", self.sorting_options["ascending"].get()
         sorting_optionsmenu = ttk.OptionMenu(sorting_labelframe, self.sorting_options["sort_by_column"], *sorting_choices)
         sorting_optionsmenu.grid(column=0, row=0, sticky="NEWS")
         # Ascending/descending checkbox
@@ -1560,7 +1563,7 @@ class TINTagger(tk.Tk):
         # Finally, update tag information in status-bar
         self.update_tag_information()
 
-    def add_tagging_buttons(self, row_number, sample_name, is_reported, sample_tag, as_id):
+    def add_tagging_buttons(self, row_number, sample_name, is_reported, sample_tag, as_id, decision_tree_tag):
         """
         Add buttons
         """
@@ -1568,11 +1571,12 @@ class TINTagger(tk.Tk):
         # Setup tagging buttons #
         #########################
         # TEST: Algo tag
-        test = random.randint(0, 2)
-        algo_tag_color = COLOR_INTERESTING
-        if test == 1:
+        algo_tag_color = COLOR_DARKWHITE
+        if decision_tree_tag == TAG_NOT_INTERESTING:
             algo_tag_color = COLOR_NOT_INTERESTING
-        if test == 0:
+        elif decision_tree_tag == TAG_INTERESTING:
+            algo_tag_color = COLOR_INTERESTING
+        elif decision_tree_tag == TAG_UNCERTAIN:
             algo_tag_color = COLOR_UNCERTAIN
 
         if not is_reported:
@@ -1754,7 +1758,7 @@ class TINTagger(tk.Tk):
             self.canvases.append(row_canvas)
 
             # Setup tagging buttons #
-            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, decision_tree_prediction)
 
             # Set even weight for every row in the exon frame
             self.exon_frame.rowconfigure(row_number, weight=1)
@@ -2450,7 +2454,7 @@ class TINTagger(tk.Tk):
             # Keep track of canvases used
             self.canvases.append(row_canvas)
             # Setup tagging buttons
-            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, sample_data["decision_tree_prediction"])
             # Set event weight for every row in the center frame
             self.exon_frame.rowconfigure(row_number, weight=1)
             # Add separator
