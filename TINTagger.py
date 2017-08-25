@@ -1421,10 +1421,11 @@ class TINTagger(tk.Tk):
             print "Decision tree prediction on entire dataset was a success"
             # Replace "decision_tree_tag" values in the original dataset by those in the tagged_data dataframe
             self.original_dataset.ix[tagged_data.index.values, "decision_tree_tag"] = tagged_data["decision_tree_tag"]
+            self.dataset.ix[tagged_data.index.values, "decision_tree_tag"] = tagged_data["decision_tree_tag"]
 
             # Refresh filtered dataset with new predictions
             # TODO: This throws an error if the filter button has not been clicked yet
-            self.apply_filters()  # This also updates the UI
+            #self.apply_filters()  # This also updates the UI
 
     def next_predicted_interesting_event_button_clicked(self):
         predicted_interesting_asid = self.data_processor.get_next_predicted_interesting_event_asid(self.current_asid, self.dataset)
