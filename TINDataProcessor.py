@@ -249,6 +249,20 @@ class TINDataProcessor(object):
         print "ERROR: No untagged events found"
         return as_id
 
+    def get_next_predicted_interesting_event_asid(self, as_id, dataset):
+
+        # Find all events that are predicted to be interesting and get their as_ids
+        predicted_interesting = dataset.loc[dataset["decision_tree_tag"] == TAG_INTERESTING]
+        predicted_interesting_asids = list(predicted_interesting.as_id.unique())
+
+        # Return the first interesting as_id, if any
+        if len(predicted_interesting_asids) > 0:
+            return predicted_interesting_asids[0]
+
+        # Otherwise just return the same as_id that was passed in
+        print "ERROR: No predicted interesting events found."
+        return as_id
+
     def get_tag_by_sample_name_and_as_id(self, sample_name, as_id, dataset):
         """
         Returns the tag for this as_id for the given sample.
@@ -730,7 +744,7 @@ class TINDataProcessor(object):
         final_df["mean_psi_other_samples"] = final_df["sum_psi_other_samples"] / (final_df["occurrences"].astype(float) - 1)
         # For events only occurring in 1 sample, mean_psi_other_samples will be np.inf. We'll replace them with 0s and
         # just ignore occurrences < 4 or something when training algos.
-        final_df["mean_psi_other_samples"].replace(np.inf, 0.00)
+        final_df["mean_psi_other_samples"].replace(np.inf, 0.00, inplace=True)
         final_df["psi_diff_from_mean_other_samples"] = final_df["psi"] - final_df["mean_psi_other_samples"]
 
         # RPKM diff (in percentage) from mean RPKM in other samples
@@ -739,10 +753,10 @@ class TINDataProcessor(object):
         final_df["mean_rpkm_other_samples"] = final_df["sum_rpkm_other_samples"] / (final_df["occurrences"].astype(float) - 1)
         # For events only occurring in 1 sample, mean_rpkm_other_samples will be np.inf. We'll replace them with 0s and
         # just ignore occurrences < 4 or something when training algos.
-        final_df["mean_rpkm_other_samples"].replace(np.inf, 0.00)
+        final_df["mean_rpkm_other_samples"].replace(np.inf, 0.00, inplace=True)
         final_df["rpkm_percentage_of_mean_other_samples"] = final_df["avg_rpkm"] / final_df["mean_rpkm_other_samples"]
-        final_df["rpkm_percentage_of_mean_other_samples"].replace(np.inf, 0.00)
-        final_df["rpkm_percentage_of_mean_other_samples"].fillna(0.00)
+        final_df["rpkm_percentage_of_mean_other_samples"].replace(np.inf, 0.00, inplace=True)
+        final_df["rpkm_percentage_of_mean_other_samples"].fillna(0.00, inplace=True)
 
         # One-hot encode splice_type column
         self.tin_tagger.set_statusbar_text("One-hot encoding splice type column")

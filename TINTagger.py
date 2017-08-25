@@ -401,6 +401,14 @@ class TINTagger(tk.Tk):
         next_untagged_button = ttk.Button(sidebar_information, text="Jump to next untagged event", command=self.next_untagged_event_button_clicked)
         next_untagged_button.grid(column=0, row=current_row, sticky="W")
         current_row += 1
+
+        predict_all_button = ttk.Button(sidebar_information, text="Predict entire dataset", command=self.predict_all_button_clicked)
+        predict_all_button.grid(column=0, row=current_row, sticky="W")
+        current_row += 1
+
+        jump_to_next_predicted_interesting = ttk.Button(sidebar_information, text="Jump to next event predicted to be interesting", command=self.next_predicted_interesting_event_button_clicked)
+        jump_to_next_predicted_interesting.grid(column=0, row=current_row, sticky="W")
+        current_row += 1
         # END TEST
 
         # Buttons frame
@@ -1398,6 +1406,35 @@ class TINTagger(tk.Tk):
             return
         else:
             self.current_asid = untagged_asid
+            self.update_information()
+
+    def predict_all_button_clicked(self):
+        print "Predicting entire dataset"
+        tagged_data = self.data_processor.tin_learner.predict_all_events_decision_tree(self.original_dataset)
+
+        try:
+            if not tagged_data:
+                print "ERROR: Decision tree has not been fitted, yet attempted to predict value on entire dataset"
+                self.original_dataset["decision_tree_tag"] = TAG_NO_TAG
+        except ValueError:
+            # Result is a dataframe
+            print "Decision tree prediction on entire dataset was a success"
+            # Replace "decision_tree_tag" values in the original dataset by those in the tagged_data dataframe
+            self.original_dataset.ix[tagged_data.index.values, "decision_tree_tag"] = tagged_data["decision_tree_tag"]
+
+            # Refresh filtered dataset with new predictions
+            # TODO: This throws an error if the filter button has not been clicked yet
+            self.apply_filters()  # This also updates the UI
+
+    def next_predicted_interesting_event_button_clicked(self):
+        predicted_interesting_asid = self.data_processor.get_next_predicted_interesting_event_asid(self.current_asid, self.dataset)
+
+        if predicted_interesting_asid == self.current_asid:
+            # No interesting events found
+            self.set_statusbar_text("ERROR: No events predicted to be interesting.")
+            return
+        else:
+            self.current_asid = predicted_interesting_asid
             self.update_information()
 
     def left_arrow_clicked(self, event):

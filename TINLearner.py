@@ -106,6 +106,15 @@ class TINLearner(object):
         # END TEST
 
         # Fit tree
+        """
+        Tips on fitting a tree:
+        -----------------------
+        - Control the number of samples at the leaf nodes. Few samples often means overfitting, more samples means it
+          can't memorize the data. Use min_samples_leaf=5 (for example) in the DT classifier.
+        - Visualize the tree as you are training by using the export function. Use max_depth=3 as an initial tree depth
+          to get a feel for how the tree is fitting to your data, and then increase the depth.
+          
+        """
         self.decision_tree.fit(training_set[self.training_columns], training_set[self.tag_column])
 
         # Test accuracy of tree
@@ -139,6 +148,44 @@ class TINLearner(object):
         except NotFittedError:
             return False
         except ValueError as e:
-            print "ERROR when fitting: %s" % e.message
+            print "ERROR when predicting: %s" % e.message
             print "--Occurrences:", event_df["occurrences"]
             return False
+
+    def predict_all_events_decision_tree(self, dataset):
+        """
+        Takes a dataset and runs predicitons on every splicing event.
+        Returns predicted tags.
+        """
+        # TODO: Or return entire dataset?
+
+        # First, exclude any event occurring in only 1 sample
+        dataset = dataset.loc[dataset["occurrences"] > 1]
+
+        # Also, only consider exon skipping events. # TODO: This should at some point be removed.
+        dataset = dataset.loc[dataset["splice_type"] == "ES"]
+
+        # Predict tags
+        try:
+            tag_predictions = self.decision_tree.predict(dataset[self.training_columns])
+            dataset.loc[:, "decision_tree_tag"] = tag_predictions
+            return dataset
+        except NotFittedError:
+            return False
+        except ValueError as e:
+            print "ERROR when predicting: %s" % e.message
+
+            # TEST
+            print "Attempting to find NaNs:"
+            mask = dataset[self.training_columns].isnull().any()
+            print mask
+
+            sub = dataset[self.training_columns]
+            print "\n10 first events with NaNs"
+            print sub[sub.isnull().any(axis=1)].head(10)
+            # END TEST
+
+            return False
+
+
+
