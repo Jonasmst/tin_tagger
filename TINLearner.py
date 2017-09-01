@@ -73,7 +73,7 @@ class TINLearner(object):
         tagged_events = dataset.loc[dataset[self.tag_column] > -1]  # -1 means they're not tagged. 0, 1, 2 are valid tags.
         tagged_events = tagged_events.loc[tagged_events["occurrences"] > 1]  # NaNs are present if event's only present in a single sample
         print "Tagged events:", len(tagged_events)
-        minimum_tagged_events = 20
+        minimum_tagged_events = 10
         if len(tagged_events) < minimum_tagged_events:
             return False
 
@@ -98,13 +98,6 @@ class TINLearner(object):
         # Split data into training set and validation set
         training_set, validation_set = train_test_split(dataset, test_size=0.2)
 
-        # TEST
-        #print "Training set:"
-        #print training_set
-        #print "\nValidation set:"
-        #print validation_set
-        # END TEST
-
         # Fit tree
         """
         Tips on fitting a tree:
@@ -121,6 +114,25 @@ class TINLearner(object):
         score = self.decision_tree.score(validation_set[self.training_columns], validation_set[self.tag_column])
 
         print "Decision tree prediction accuracy: %.2f" % score
+
+        print_tree = True
+        if print_tree:
+            from sklearn.externals.six import StringIO
+            import pydot
+            dot_data = StringIO()
+            export_graphviz(
+                self.decision_tree,
+                out_file=dot_data,
+                class_names = ["Deviating", "Non deviating"],
+                feature_names=self.training_columns,
+                filled=True,
+                leaves_parallel=True,
+                rounded=True,
+                max_depth=3
+            )
+            graph = pydot.graph_from_dot_data(dot_data.getvalue())
+            graph[0].write_pdf("decision_tree.pdf")
+            print "Tree written to file decision_tree.pdf"
 
         # Training successful, return accuracy
         return score
@@ -139,11 +151,6 @@ class TINLearner(object):
 
         try:
             tag_predictions = self.decision_tree.predict(event_df[self.training_columns])
-            print "##########################################################"
-            print "################### TAG PREDICTIONS ######################"
-            print "##########################################################"
-            print tag_predictions
-            print "##########################################################"
             return tag_predictions
         except NotFittedError:
             return False
