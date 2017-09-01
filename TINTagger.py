@@ -23,6 +23,7 @@ from Queue import Empty
 # TODO: Text is huge on linux
 # TODO: Add feedback as text in the statusbar when connecting to DB and reading datasets. Blink/animate (non-static)
 # TODO: Support both reading from database and reading from local file
+# TODO: Right-click to downvote-all toggles already downvoted samples to neutral state, rather than keeping them downvoted.
 
 """
 ################################################
@@ -1293,6 +1294,17 @@ class TINTagger(tk.Tk):
         # Get data for this row
         data = self.data_processor.get_row_data(self.current_asid, self.original_dataset, self.sample_names, self.testing)
 
+        """
+        print "###############################################################################"
+        print "self.original_dataset:"
+        print self.original_dataset.loc[self.original_dataset.as_id == self.current_asid]
+        print "###############################################################################"
+        print "###############################################################################"
+        print "self.dataset:"
+        print self.dataset.loc[self.dataset.as_id == self.current_asid]
+        print "###############################################################################"
+        """
+
         # Populate the sidebar with general information
         self.asid_text["text"] = data["as_id"]
         self.location_text["text"] = data["coords"]
@@ -1737,6 +1749,7 @@ class TINTagger(tk.Tk):
         """
 
         for uninteresting_button in self.all_uninteresting_buttons:
+            print "STATE: %s" % uninteresting_button["state"]
             uninteresting_button.invoke()
 
     def draw_exon_skipping_event(self, data):
@@ -1830,7 +1843,8 @@ class TINTagger(tk.Tk):
             self.canvases.append(row_canvas)
 
             # Setup tagging buttons #
-            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, decision_tree_prediction)
+            #self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, decision_tree_prediction)
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, sample_data["decision_tree_prediction"])
 
             # Set even weight for every row in the exon frame
             self.exon_frame.rowconfigure(row_number, weight=1)
@@ -2050,7 +2064,8 @@ class TINTagger(tk.Tk):
             # Keep track of canvases used
             self.canvases.append(row_canvas)
             # Setup tagging buttons
-            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            #self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, sample_data["decision_tree_prediction"])
             # Set even weight for every row in the exon frame
             self.exon_frame.rowconfigure(row_number, weight=1)
             # Add separator
@@ -2324,7 +2339,7 @@ class TINTagger(tk.Tk):
             self.canvases.append(row_canvas)
 
             # Setup tagging buttons
-            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, sample_data["decision_tree_prediction"])
 
             # Set even weight for every row in the center frame
             self.exon_frame.rowconfigure(row_number, weight=1)
@@ -2717,7 +2732,8 @@ class TINTagger(tk.Tk):
             # Keep track of canvases used
             self.canvases.append(row_canvas)
             # Setup tagging buttons
-            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            #self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, sample_data["decision_tree_prediction"])
             # Set event weight for every row in the center frame
             self.exon_frame.rowconfigure(row_number, weight=1)
             # Add separator
@@ -2888,7 +2904,8 @@ class TINTagger(tk.Tk):
             # Keep track of canvases used
             self.canvases.append(row_canvas)
             # Setup tagging buttons
-            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            #self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, sample_data["decision_tree_prediction"])
             # Set event weight for every row in the center frame
             self.exon_frame.rowconfigure(row_number, weight=1)
             # Add separator
@@ -3050,7 +3067,8 @@ class TINTagger(tk.Tk):
             # Keep track of canvases used
             self.canvases.append(row_canvas)
             # Setup tagging buttons
-            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            #self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id)
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, sample_data["decision_tree_prediction"])
             # Set event weight for every row in the center frame
             self.exon_frame.rowconfigure(row_number, weight=1)
             # Add separator
