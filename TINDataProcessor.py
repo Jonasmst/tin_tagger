@@ -11,10 +11,10 @@ from TINLearner import TINLearner
 # TODO: Test the relative differences between exons when using SAMtools and DB RPKM.
 # - Are the relative differences the same? Otherwise, which one should we use?
 
-TAG_NO_TAG = -1
 TAG_INTERESTING = 0
 TAG_NOT_INTERESTING = 1
 TAG_UNCERTAIN = 2
+TAG_NO_TAG = -1
 
 # Fix pandas print width
 pd.set_option("display.width", 250)
@@ -757,6 +757,9 @@ class TINDataProcessor(object):
         final_df["rpkm_percentage_of_mean_other_samples"] = final_df["avg_rpkm"] / final_df["mean_rpkm_other_samples"]
         final_df["rpkm_percentage_of_mean_other_samples"].replace(np.inf, 0.00, inplace=True)
         final_df["rpkm_percentage_of_mean_other_samples"].fillna(0.00, inplace=True)
+
+        # This, too, yields NaNs for events only occurring in 1 sample
+        final_df["rpkm_abs_diff_mean_other_samples"] = abs(final_df["avg_rpkm"] - final_df["mean_rpkm_other_samples"])
 
         # One-hot encode splice_type column
         self.tin_tagger.set_statusbar_text("One-hot encoding splice type column")
