@@ -727,18 +727,18 @@ class TINDataProcessor(object):
         print "Assigning variables for algo learning purposes"
         # Percent of max PSI
         final_df["percent_of_max_psi"] = final_df["psi"] / final_df["max_psi"]
-        final_df["percent_of_max_psi"].fillna(0, inplace=True)
+        final_df["percent_of_max_psi"].fillna(0, inplace=True)  # NaN when psi and max-psi are both 0.00
         # Percent of max RPKM
         final_df["percent_of_max_rpkm"] = final_df["avg_rpkm"] / final_df["max_avg_rpkm"]
-        final_df["percent_of_max_rpkm"].fillna(0, inplace=True)
+        final_df["percent_of_max_rpkm"].fillna(0, inplace=True)  # NaN when avg_rpkm and max_avg_rpkm are both 0.00
         # Main exon to upstream RPKM ratio
         final_df["main_rpkm_to_upstream_rpkm_ratio"] = final_df["avg_rpkm"] / final_df["prev_exon_rpkm"]
-        final_df["main_rpkm_to_upstream_rpkm_ratio"].fillna(0, inplace=True)
-        final_df["main_rpkm_to_upstream_rpkm_ratio"] = final_df["main_rpkm_to_upstream_rpkm_ratio"].replace(np.inf, 1)
+        final_df["main_rpkm_to_upstream_rpkm_ratio"].fillna(0, inplace=True)  # NaN when avg_rpkm and prev_exon_rpkm are both 0.00
+        final_df["main_rpkm_to_upstream_rpkm_ratio"] = final_df["main_rpkm_to_upstream_rpkm_ratio"].replace(np.inf, 1)  # Inf when avg_rpkm > 0.00 and prev_exon_rpkm == 0.00
         # Main exon to downstream RPKM ratio
         final_df["main_rpkm_to_downstream_rpkm_ratio"] = final_df["avg_rpkm"] / final_df["next_exon_rpkm"]
-        final_df["main_rpkm_to_downstream_rpkm_ratio"].fillna(0, inplace=True)
-        final_df["main_rpkm_to_downstream_rpkm_ratio"] = final_df["main_rpkm_to_downstream_rpkm_ratio"].replace(np.inf, 1)
+        final_df["main_rpkm_to_downstream_rpkm_ratio"].fillna(0, inplace=True)  # NaN when avg_rpkm and next_exon_rpkm are both 0.00
+        final_df["main_rpkm_to_downstream_rpkm_ratio"] = final_df["main_rpkm_to_downstream_rpkm_ratio"].replace(np.inf, 1)  # Inf when avg_rpkm > 0.00 and next_exon_rpkm == 0.00
 
         # PSI diff (in percentage) from mean PSI in other samples
         final_df["sum_psi_all_samples"] = final_df.groupby("as_id")["psi"].transform(sum)
@@ -746,17 +746,17 @@ class TINDataProcessor(object):
         final_df["mean_psi_other_samples"] = final_df["sum_psi_other_samples"] / (final_df["occurrences"].astype(float) - 1)
         # For events only occurring in 1 sample, mean_psi_other_samples will be np.inf. We'll replace them with 0s and
         # just ignore occurrences < 4 or something when training algos.
-        final_df["mean_psi_other_samples"].replace(np.inf, 0.00, inplace=True)
+        final_df["mean_psi_other_samples"].replace(np.inf, 0.00, inplace=True)  # Not sure when/if this is inf
         final_df["psi_diff_from_mean_other_samples"] = final_df["psi"] - final_df["mean_psi_other_samples"]
 
         # RPKM diff (in percentage) from mean RPKM in other samples
         final_df["sum_rpkm_all_samples"] = final_df.groupby("as_id")["avg_rpkm"].transform(sum)
         final_df["sum_rpkm_other_samples"] = final_df["sum_rpkm_all_samples"] - final_df["avg_rpkm"]
         final_df["mean_rpkm_other_samples"] = final_df["sum_rpkm_other_samples"] / (final_df["occurrences"].astype(float) - 1)
-        final_df["mean_rpkm_other_samples"].replace(np.inf, 0.00, inplace=True)
+        final_df["mean_rpkm_other_samples"].replace(np.inf, 0.00, inplace=True)  # Not sure when/if this is inf
         final_df["rpkm_percentage_of_mean_other_samples"] = final_df["avg_rpkm"] / final_df["mean_rpkm_other_samples"]
-        final_df["rpkm_percentage_of_mean_other_samples"].replace(np.inf, 1.00, inplace=True)
-        final_df["rpkm_percentage_of_mean_other_samples"].fillna(0.00, inplace=True)
+        final_df["rpkm_percentage_of_mean_other_samples"].replace(np.inf, 1.00, inplace=True)  # Inf when mean_rpkm_other_samples == 0.00 and avg_rpkm > 0.00
+        final_df["rpkm_percentage_of_mean_other_samples"].fillna(0.00, inplace=True)  # NaN if occurrences == 1 (mean_rpkm_other_samples will be NaN). Also NaN when avg_rpkm and mean_rpkm_other_samples are 0.00
 
         # This, too, yields NaNs for events only occurring in 1 sample
         final_df["rpkm_abs_diff_mean_other_samples"] = abs(final_df["avg_rpkm"] - final_df["mean_rpkm_other_samples"])
