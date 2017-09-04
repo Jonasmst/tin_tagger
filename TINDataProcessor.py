@@ -419,6 +419,8 @@ class TINDataProcessor(object):
         row_data["samples"] = samples_data
 
         return row_data
+        print "# Sample: %s" % s_name
+        print "## Sample prediction:", samples_data[s_name]["decision_tree_prediction"]
 
     def get_rpkm_for_mutually_exclusive_exons(self, sample_names, as_id):
         """
@@ -751,11 +753,9 @@ class TINDataProcessor(object):
         final_df["sum_rpkm_all_samples"] = final_df.groupby("as_id")["avg_rpkm"].transform(sum)
         final_df["sum_rpkm_other_samples"] = final_df["sum_rpkm_all_samples"] - final_df["avg_rpkm"]
         final_df["mean_rpkm_other_samples"] = final_df["sum_rpkm_other_samples"] / (final_df["occurrences"].astype(float) - 1)
-        # For events only occurring in 1 sample, mean_rpkm_other_samples will be np.inf. We'll replace them with 0s and
-        # just ignore occurrences < 4 or something when training algos.
         final_df["mean_rpkm_other_samples"].replace(np.inf, 0.00, inplace=True)
         final_df["rpkm_percentage_of_mean_other_samples"] = final_df["avg_rpkm"] / final_df["mean_rpkm_other_samples"]
-        final_df["rpkm_percentage_of_mean_other_samples"].replace(np.inf, 0.00, inplace=True)
+        final_df["rpkm_percentage_of_mean_other_samples"].replace(np.inf, 1.00, inplace=True)
         final_df["rpkm_percentage_of_mean_other_samples"].fillna(0.00, inplace=True)
 
         # This, too, yields NaNs for events only occurring in 1 sample
