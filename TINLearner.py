@@ -37,7 +37,8 @@ class TINLearner(object):
             "main_rpkm_to_upstream_rpkm_ratio",
             "main_rpkm_to_downstream_rpkm_ratio",
             "psi_diff_from_mean_other_samples",
-            "rpkm_percentage_of_mean_other_samples"
+            "rpkm_percentage_of_mean_other_samples",
+            "rpkm_abs_diff_mean_other_samples"
         ]
 
     def prepare_dataset(self, dataset):
