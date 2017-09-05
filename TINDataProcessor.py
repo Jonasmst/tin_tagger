@@ -164,7 +164,8 @@ class TINDataProcessor(object):
             "sum_rpkm_all_samples",
             "sum_rpkm_other_samples",
             "mean_rpkm_other_samples",
-            "rpkm_percentage_of_mean_other_samples"
+            "rpkm_percentage_of_mean_other_samples",
+            "rpkm_abs_diff_mean_other_samples"
         ]
         for f in float_fields:
             df = df.loc[df[f] >= float(filters[f][1].get())]

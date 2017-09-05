@@ -892,7 +892,8 @@ class TINTagger(tk.Tk):
             "sum_rpkm_all_samples",
             "sum_rpkm_other_samples",
             "mean_rpkm_other_samples",
-            "rpkm_percentage_of_mean_other_samples"
+            "rpkm_percentage_of_mean_other_samples",
+            "rpkm_abs_diff_mean_other_samples"
         ]:
             # Set current value to control variable
             self.filters[adv_filter][1].set(self.filters[adv_filter][0])
@@ -963,6 +964,7 @@ class TINTagger(tk.Tk):
             "sum_rpkm_other_samples": ["0.00", tk.StringVar(), "Min. sum main exon RPKM in other samples"],
             "mean_rpkm_other_samples": ["0.00", tk.StringVar(), "Min. average main exon RPKM in other samples"],
             "rpkm_percentage_of_mean_other_samples": ["0.00", tk.StringVar(), "Min. main exon RPKM percentage of average in other samples"],
+            "rpkm_abs_diff_mean_other_samples": ["0.00", tk.StringVar(), "Min. abs. diff. main exon RPKM from average in other samples"],
             "splice_type": {
                 "AA": [True, tk.BooleanVar(), "Alternate Acceptor"],
                 "AD": [True, tk.BooleanVar(), "Alternate Donor"],
@@ -1023,7 +1025,8 @@ class TINTagger(tk.Tk):
             "sum_rpkm_all_samples",
             "sum_rpkm_other_samples",
             "mean_rpkm_other_samples",
-            "rpkm_percentage_of_mean_other_samples"
+            "rpkm_percentage_of_mean_other_samples",
+            "rpkm_abs_diff_mean_other_samples"
         ]
 
         # Sanitize int fields
@@ -1843,8 +1846,8 @@ class TINTagger(tk.Tk):
             self.canvases.append(row_canvas)
 
             # Setup tagging buttons #
-            #self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, decision_tree_prediction)
-            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, sample_data["decision_tree_prediction"])
+            self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, decision_tree_prediction)
+            #self.add_tagging_buttons(row_number, sample_name, is_reported, sample_tag, as_id, sample_data["decision_tree_prediction"])
 
             # Set even weight for every row in the exon frame
             self.exon_frame.rowconfigure(row_number, weight=1)
