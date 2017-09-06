@@ -1443,7 +1443,14 @@ class TINTagger(tk.Tk):
             print "Decision tree prediction on entire dataset was a success"
             # Replace "decision_tree_tag" values in the original dataset by those in the tagged_data dataframe
             self.original_dataset.ix[tagged_data.index.values, "decision_tree_tag"] = tagged_data["decision_tree_tag"]
-            self.dataset.ix[tagged_data.index.values, "decision_tree_tag"] = tagged_data["decision_tree_tag"]
+            # TODO: Filtering/training bug, see below:
+            """
+            Predictions are done on the original dataset, i.e. every event. However, not all indexes in the original
+            dataset are in the filtered dataset, so the below line throws an error. I need to only extract those indexes
+            from the predicted data that are present in the filtered data.
+            """
+            #self.dataset.ix[tagged_data.index.values, "decision_tree_tag"] = tagged_data["decision_tree_tag"]
+            self.dataset["decision_tree_tag"] = tagged_data.ix[self.dataset.index.values, "decision_tree_tag"]
 
             # Refresh filtered dataset with new predictions
             # TODO: This throws an error if the filter button has not been clicked yet
