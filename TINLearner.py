@@ -124,12 +124,12 @@ class TINLearner(object):
             export_graphviz(
                 self.decision_tree,
                 out_file=dot_data,
-                class_names = ["Deviating", "Non deviating"],
+                class_names=["Deviating", "Non deviating"],
                 feature_names=self.training_columns,
                 filled=True,
                 leaves_parallel=True,
                 rounded=True,
-                max_depth=3
+                max_depth=5
             )
             graph = pydot.graph_from_dot_data(dot_data.getvalue())
             graph[0].write_pdf("decision_tree.pdf")
