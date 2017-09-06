@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import Tkinter as tk
 import ttk
 import sys
@@ -391,6 +392,9 @@ class TINTagger(tk.Tk):
         search_entry.grid(column=1, row=current_row, sticky="NEWS")
         search_button = ttk.Button(sidebar_information, text="Search", command=lambda: self.search_asid(search_entry.get()))
         search_button.grid(column=2, row=current_row, sticky="NSE")
+        self.bind("<Return>", lambda event=None: self.search_asid(search_entry.get()))
+        self.bind("<KP_Enter>", lambda event=None: self.search_asid(search_entry.get()))
+        self.bind("<f>", lambda event=None: search_entry.focus())
 
         current_row += 1
 
@@ -440,6 +444,9 @@ class TINTagger(tk.Tk):
         try:
             as_id = int(as_id)
         except ValueError:
+            if as_id == "":
+                self.set_statusbar_text("No ASID search query provided ¯\_(ツ)_/¯")
+                return
             tkMessageBox.showerror("Search error", "Invalid value: <%s>. Value must be an integer." % as_id)
             return
         except TypeError:
@@ -1574,8 +1581,8 @@ class TINTagger(tk.Tk):
             self.sample_frame.rowconfigure(row_number, weight=1)
 
             # Display RPKM info in statusbar on hover
-            display_text = "%s gene RPKM: %s/%s (%.0f%%)" % (
-                sample_name, str(gene_rpkm), str(sample_data["max_gene_rpkm"]), gene_rpkm_percent_of_max)
+            display_text = "%s gene RPKM: %.1f/%.1f (%.0f%%)" % (
+                sample_name, gene_rpkm, sample_data["max_gene_rpkm"], gene_rpkm_percent_of_max)
             frame_for_sample.bind("<Enter>", store_rpkm_text(display_text))
             rpkm_color = COLOR_RED
 
