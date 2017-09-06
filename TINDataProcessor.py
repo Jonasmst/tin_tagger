@@ -258,7 +258,23 @@ class TINDataProcessor(object):
 
         # Return the first interesting as_id, if any
         if len(predicted_interesting_asids) > 0:
-            return predicted_interesting_asids[0]
+
+            # Find out if current as_id is in the list
+            try:
+                index = predicted_interesting_asids.index(as_id)
+                next_index = index + 1
+
+                # Make sure new index is not out of bounds
+                if next_index >= len(predicted_interesting_asids):
+                    print "WARNING: Current event index is last index in predicted_interesting_asids. Returning last valid index."
+                    return predicted_interesting_asids[index]
+                else:
+                    # All is good, return as_id of new index
+                    return predicted_interesting_asids[next_index]
+
+            except ValueError:
+                # Current as_id not in list
+                return predicted_interesting_asids[0]
 
         # Otherwise just return the same as_id that was passed in
         print "ERROR: No predicted interesting events found."
