@@ -2,3 +2,7 @@
 datasets/*
 *.pyc
 .idea*
+plots/*
+*.pdf
+pycallgraph.png
+*.tsv
