@@ -1834,7 +1834,10 @@ class TINTagger(tk.Tk):
             # Sample-specific variables
             is_reported = sample_data["is_reported"]
             sample_tag = sample_data["event_tag"]
-            # TODO: Update colors depending on tag
+            # TEST
+            main_to_upstream_rpkm_ratio = sample_data["main_rpkm_to_upstream_rpkm_ratio"]
+            main_to_downstream_rpkm_ratio = sample_data["main_rpkm_to_downstream_rpkm_ratio"]
+            # END TEST
             try:
                 decision_tree_prediction = sample_data["decision_tree_prediction"]
                 print "TINTagger got prediction <%d> for sample <%s>" % (decision_tree_prediction, sample_name)
@@ -1980,6 +1983,18 @@ class TINTagger(tk.Tk):
             downstream_exon_text_start_x = downstream_exon_start_x + (exon_width / 2)
             row_canvas.create_text(downstream_exon_text_start_x + 1, upstream_exon_text_start_y + 1, text="%.1f" % downstream_exon_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT_SHADOW, tags=TEXTTAG_SHADOW)
             row_canvas.create_text(downstream_exon_text_start_x, upstream_exon_text_start_y, text="%.1f" % downstream_exon_rpkm, font=self.canvas_font, fill=COLOR_CANVAS_TEXT, tags=TEXTTAG_COVERAGE)
+
+            ########################################
+            # Draw upstream- and downstream ratios #
+            ########################################
+            # TEST: Add main-to-upstream-rpkm-ratio
+            upstream_ratio_start_x = main_exon_start_x - ((width_per_exon_container - exon_width) / 2)
+            row_canvas.create_text(upstream_ratio_start_x, upstream_exon_text_start_y, text="%.1f" % main_to_upstream_rpkm_ratio, font=self.canvas_font, fill="black")
+
+            downstream_ratio_start_x = downstream_exon_start_x - ((width_per_exon_container - exon_width) / 2)
+            row_canvas.create_text(downstream_ratio_start_x, upstream_exon_text_start_y, text="%.1f" % main_to_downstream_rpkm_ratio, font=self.canvas_font, fill="black")
+            # END TEST
+
 
             # Update row index for next sample
             row_number += 1

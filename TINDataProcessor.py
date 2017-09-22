@@ -416,6 +416,10 @@ class TINDataProcessor(object):
                 samples_data[s_name]["excluded_counts"] = sample_row["excluded_counts"]
                 samples_data[s_name]["max_gene_rpkm"] = sample_row["max_gene_rpkm"]
                 samples_data[s_name]["decision_tree_prediction"] = sample_row["decision_tree_tag"]
+                # TEST
+                samples_data[s_name]["main_rpkm_to_upstream_rpkm_ratio"] = sample_row["main_rpkm_to_upstream_rpkm_ratio"]
+                samples_data[s_name]["main_rpkm_to_downstream_rpkm_ratio"] = sample_row["main_rpkm_to_downstream_rpkm_ratio"]
+                # END TEST
             except IndexError:
                 # Sample not present, fill with "blanks"
                 samples_data[s_name]["is_reported"] = False
@@ -432,6 +436,10 @@ class TINDataProcessor(object):
                 samples_data[s_name]["included_counts"] = 0
                 samples_data[s_name]["excluded_counts"] = 0
                 samples_data[s_name]["max_gene_rpkm"] = 0
+                # TEST
+                samples_data[s_name]["main_rpkm_to_upstream_rpkm_ratio"] = 0
+                samples_data[s_name]["main_rpkm_to_downstream_rpkm_ratio"] = 0
+                # END TEST
 
         row_data["samples"] = samples_data
 
